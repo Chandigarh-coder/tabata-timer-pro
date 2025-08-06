@@ -1,0 +1,57 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tabata Timer Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              'brand-cyan': {
+                '50': '#ecfeff',
+                '100': '#cffafe',
+                '200': '#a5f3fc',
+                '300': '#67e8f9',
+                '400': '#22d3ee',
+                '500': '#06b6d4',
+                '600': '#0891b2',
+                '700': '#0e7490',
+                '800': '#155e75',
+                '900': '#164e63',
+                '950': '#083344',
+              },
+              'brand-orange': {
+                '500': '#f97316'
+              }
+            },
+            keyframes: {
+              'fade-in-right': {
+                '0%': {
+                  opacity: '0',
+                  transform: 'translateX(100%)'
+                },
+                '100%': {
+                  opacity: '1',
+                  transform: 'translateX(0)'
+                }
+              }
+            },
+            animation: {
+              'fade-in-right': 'fade-in-right 0.5s ease-out'
+            }
+          }
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
