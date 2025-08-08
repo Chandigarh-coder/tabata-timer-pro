@@ -107,6 +107,11 @@ export function useVoices() {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 
   useEffect(() => {
+    // Only run on client side
+    if (typeof window === 'undefined' || !window.speechSynthesis) {
+      return;
+    }
+    
     const synth = window.speechSynthesis;
     const updateVoices = () => {
       setVoices(synth.getVoices());
@@ -163,6 +168,12 @@ export const useSpeech = (voiceURI: string | null) => {
   }, [updateVoices]);
 
   const speak = useCallback((text: string) => {
+    // Check if Web Speech API is available
+    if (typeof window === 'undefined' || !window.speechSynthesis) {
+      console.error('Speech synthesis not available in this browser or environment.');
+      return;
+    }
+    
     if (!synth) {
       console.error('Speech synthesis not available');
       return;

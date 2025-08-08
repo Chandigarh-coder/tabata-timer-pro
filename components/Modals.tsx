@@ -41,18 +41,26 @@ interface SettingsModalProps {
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings, onSettingsChange, addToast, onSonicMode }) => {
-  const Toggle = ({ id, label, checked, onChange }: { id?: string; label: string; checked: boolean; onChange: (checked: boolean) => void }) => (
-    <label className="flex items-center justify-between cursor-pointer py-3 border-b border-slate-200 dark:border-slate-700">
+  const Toggle = ({ id, label, checked, onChange, disabled }: { id?: string; label: string; checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean }) => (
+    <label className={`flex items-center justify-between py-3 border-b border-slate-200 dark:border-slate-700 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
       <span className="text-slate-700 dark:text-slate-300">{label}</span>
       <div className="relative">
-        <input id={id} type="checkbox" className="sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-        <div className={`block w-14 h-8 rounded-full transition ${checked ? 'bg-brand-cyan-600' : 'bg-slate-300 dark:bg-slate-600'}`}></div>
-        <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${checked ? 'transform translate-x-6' : ''}`}></div>
+        <input
+          id={id}
+          type="checkbox"
+          className="sr-only"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          disabled={disabled}
+        />
+        <div className={`block w-14 h-8 rounded-full transition ${checked ? 'bg-brand-cyan-600' : 'bg-slate-300 dark:bg-slate-600'} ${disabled ? 'opacity-50' : ''}`}></div>
+        <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${checked ? 'transform translate-x-6' : ''} ${disabled ? 'opacity-50' : ''}`}></div>
       </div>
     </label>
   );
 
   const voices = useVoices();
+  const isSpeechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
   const supportedVoices = voices.filter(voice => {
     const isEnglish = voice.lang.startsWith('en');
     const isSpanish = voice.lang.startsWith('es');
@@ -95,6 +103,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
   };
 
   const previewVoice = (voice: SpeechSynthesisVoice | null) => {
+    // Check if Web Speech API is available
+    if (typeof window === 'undefined' || !window.speechSynthesis) {
+      addToast('Speech synthesis is not supported in this browser or environment.', 'error');
+      return;
+    }
+    
     const synth = window.speechSynthesis;
     synth.cancel();
     
@@ -131,47 +145,65 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
         <div className="mb-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Voice Assistant</h3>
-            <Toggle 
+            <Toggle
               id="voiceAssistant"
               label=""
-              checked={settings.voiceOn} 
-              onChange={(val) => onSettingsChange(s => ({...s, voiceOn: val}))} 
+              checked={isSpeechSupported ? settings.voiceOn : false}
+              onChange={(val) => onSettingsChange(s => ({...s, voiceOn: val}))}
+              disabled={!isSpeechSupported}
             />
           </div>
-          <p className="text-sm text-gray-500 mt-1">Use voice assistant during workout</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Use voice assistant during workout
+            {!isSpeechSupported && (
+              <span className="text-yellow-600 dark:text-yellow-400 ml-2">
+                (Not supported in this environment)
+              </span>
+            )}
+          </p>
         </div>
 
         <div className="mb-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Voice (English/Spanish)</h3>
           </div>
-          <select 
-            value={settings.voiceURI || ''} 
-            onChange={(e) => onSettingsChange(s => ({...s, voiceURI: e.target.value || ''}))}
-            className="w-full p-2 border rounded"
-          >
-            <option value="">Default System Voice</option>
-            {supportedVoices.map(voice => (
-              <option key={voice.voiceURI} value={voice.voiceURI}>
-                {voice.name} ({voice.lang})
-              </option>
-            ))}
-          </select>
-          <button 
-            onClick={() => {
-              // If voiceURI is empty, it means "Default System Voice" is selected
-              if (!settings.voiceURI) {
-                previewVoice(null);
-              } else {
-                const selectedVoice = supportedVoices.find(v => v.voiceURI === settings.voiceURI);
-                if (selectedVoice) previewVoice(selectedVoice);
-              }
-            }}
-            className="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
-            Preview Voice
-          </button>
-          <p className="text-sm text-gray-500 mt-1">Select a voice for announcements</p>
+          {isSpeechSupported ? (
+            <>
+              <select
+                value={settings.voiceURI || ''}
+                onChange={(e) => onSettingsChange(s => ({...s, voiceURI: e.target.value || ''}))}
+                className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                <option value="">Default System Voice</option>
+                {supportedVoices.map(voice => (
+                  <option key={voice.voiceURI} value={voice.voiceURI}>
+                    {voice.name} ({voice.lang})
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => {
+                  // If voiceURI is empty, it means "Default System Voice" is selected
+                  if (!settings.voiceURI) {
+                    previewVoice(null);
+                  } else {
+                    const selectedVoice = supportedVoices.find(v => v.voiceURI === settings.voiceURI);
+                    if (selectedVoice) previewVoice(selectedVoice);
+                  }
+                }}
+                className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+              >
+                Preview Voice
+              </button>
+              <p className="text-sm text-gray-500 mt-1">Select a voice for announcements</p>
+            </>
+          ) : (
+            <div className="p-3 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 rounded-md border border-yellow-200 dark:border-yellow-800">
+              <p className="text-sm">
+                Speech synthesis is not supported in this browser or environment. Voice features will not be available.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="mb-4">
