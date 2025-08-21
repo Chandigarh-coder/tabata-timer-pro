@@ -1,7 +1,6 @@
 import React from 'react';
 import type { AppSettings, Workout, ToastMessage } from '../types';
 import { CloseIcon, FolderOpenIcon, TrashIcon } from './icons';
-import { useVoices } from '../hooks';
 
 interface ModalProps {
   isOpen: boolean;
@@ -14,18 +13,20 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 z-40 flex justify-center items-center" onClick={onClose}>
+    <div className="fixed inset-0 bg-black bg-opacity-60 z-40 flex justify-center items-center p-3 sm:p-4" onClick={onClose}>
       <div
-        className="bg-gradient-to-br from-orange-200 via-pink-200 to-cyan-200 dark:from-red-900 dark:via-purple-900 dark:to-teal-700 rounded-lg shadow-2xl p-6 w-11/12 max-w-md m-4 transform transition-all"
+        className="bg-gradient-to-br from-orange-200 via-pink-200 to-cyan-200 dark:from-red-900 dark:via-purple-900 dark:to-teal-700 rounded-lg shadow-2xl w-full max-w-sm sm:max-w-md max-h-[90vh] m-0 sm:m-2 p-4 overflow-hidden grid grid-rows-[auto,1fr]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-slate-800 dark:text-white dark:drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">{title}</h2>
+        <div className="flex justify-between items-center mb-2">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-white dark:drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">{title}</h2>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">
-            <CloseIcon />
+            <CloseIcon className="w-6 h-6" />
           </button>
         </div>
-        <div>{children}</div>
+        <div className="overflow-y-auto pr-1">
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -42,8 +43,8 @@ interface SettingsModalProps {
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings, onSettingsChange, addToast, onSonicMode }) => {
   const Toggle = ({ id, label, checked, onChange, disabled }: { id?: string; label: string; checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean }) => (
-    <label className={`flex items-center justify-between py-3 border-b border-slate-200 dark:border-slate-700 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
-      <span className="text-slate-700 dark:text-slate-300">{label}</span>
+    <label className={`flex items-center justify-between py-2 border-b border-slate-200 dark:border-slate-700 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+      <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
       <div className="relative">
         <input
           id={id}
@@ -53,23 +54,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
           onChange={(e) => onChange(e.target.checked)}
           disabled={disabled}
         />
-        <div className={`block w-14 h-8 rounded-full transition ${checked ? 'bg-brand-cyan-600' : 'bg-slate-300 dark:bg-slate-600'} ${disabled ? 'opacity-50' : ''}`}></div>
-        <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${checked ? 'transform translate-x-6' : ''} ${disabled ? 'opacity-50' : ''}`}></div>
+        <div className={`block w-12 h-7 rounded-full transition ${checked ? 'bg-brand-cyan-600' : 'bg-slate-300 dark:bg-slate-600'} ${disabled ? 'opacity-50' : ''}`}></div>
+        <div className={`dot absolute left-1 top-1 bg-white w-5 h-5 rounded-full transition-transform ${checked ? 'transform translate-x-5' : ''} ${disabled ? 'opacity-50' : ''}`}></div>
       </div>
     </label>
   );
 
-  const voices = useVoices();
-  const isSpeechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
-  const supportedVoices = voices.filter(voice => {
-    const isEnglish = voice.lang.startsWith('en');
-    const isSpanish = voice.lang.startsWith('es');
-    const isFemale = /female|woman|femenina|mulher|latina/i.test(voice.name);
-    const hasLatinaVibe = /latina|hispanic|mexican|spanish|español/i.test(voice.name);
-    const isBritish = /en-GB|british|UK|England/i.test(voice.lang) || /british|UK|England/i.test(voice.name);
-    
-    return (isEnglish || isSpanish) && (isFemale || hasLatinaVibe) && !isBritish;
-  });
+  // No voice features
 
   const handleNotificationToggle = async (checked: boolean) => {
     if (!checked) {
@@ -102,36 +93,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
     }
   };
 
-  const previewVoice = (voice: SpeechSynthesisVoice | null) => {
-    // Check if Web Speech API is available
-    if (typeof window === 'undefined' || !window.speechSynthesis) {
-      addToast('Speech synthesis is not supported in this browser or environment.', 'error');
-      return;
-    }
-    
-    const synth = window.speechSynthesis;
-    synth.cancel();
-    
-    const utterance = new SpeechSynthesisUtterance(
-      "Hello, testing the voice. Three, two, one, let's go!"
-    );
-    
-    // If a specific voice is provided, use it; otherwise, use the default voice
-    if (voice) {
-      utterance.voice = voice;
-    }
-    
-    utterance.rate = 0.9;
-    utterance.pitch = 1.1;
-    synth.speak(utterance);
-  };
+  // Noise previews disabled by design
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Settings">
       <div className="space-y-2">
-        <div className="mb-4">
+        <div className="mb-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Sound Effects</h3>
+            <h3 className="text-base font-semibold text-slate-800 dark:text-white">Sound Effects</h3>
             <Toggle 
               id="soundEffects"
               label=""
@@ -139,76 +108,54 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
               onChange={(val) => onSettingsChange(s => ({...s, soundOn: val}))} 
             />
           </div>
-          <p className="text-sm text-gray-500 mt-1">Play sound effects during workout</p>
+          <p className="text-xs text-gray-500 mt-1 hidden sm:block">Play sound effects during workout</p>
         </div>
 
-        <div className="mb-4">
+        {/* Voice settings removed */}
+
+        <div className="mb-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Voice Assistant</h3>
+            <h3 className="text-base font-semibold text-slate-800 dark:text-white">Noise System</h3>
             <Toggle
-              id="voiceAssistant"
+              id="noiseSystem"
               label=""
-              checked={isSpeechSupported ? settings.voiceOn : false}
-              onChange={(val) => onSettingsChange(s => ({...s, voiceOn: val}))}
-              disabled={!isSpeechSupported}
+              checked={settings.noiseSystemOn}
+              onChange={(val) => onSettingsChange(s => ({...s, noiseSystemOn: val}))}
             />
           </div>
-          <p className="text-sm text-gray-500 mt-1">
-            Use voice assistant during workout
-            {!isSpeechSupported && (
-              <span className="text-yellow-600 dark:text-yellow-400 ml-2">
-                (Not supported in this environment)
-              </span>
-            )}
-          </p>
-        </div>
-
-        <div className="mb-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Voice (English/Spanish)</h3>
-          </div>
-          {isSpeechSupported ? (
-            <>
-              <select
-                value={settings.voiceURI || ''}
-                onChange={(e) => onSettingsChange(s => ({...s, voiceURI: e.target.value || ''}))}
-                className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              >
-                <option value="">Default System Voice</option>
-                {supportedVoices.map(voice => (
-                  <option key={voice.voiceURI} value={voice.voiceURI}>
-                    {voice.name} ({voice.lang})
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={() => {
-                  // If voiceURI is empty, it means "Default System Voice" is selected
-                  if (!settings.voiceURI) {
-                    previewVoice(null);
-                  } else {
-                    const selectedVoice = supportedVoices.find(v => v.voiceURI === settings.voiceURI);
-                    if (selectedVoice) previewVoice(selectedVoice);
-                  }
-                }}
-                className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
-              >
-                Preview Voice
-              </button>
-              <p className="text-sm text-gray-500 mt-1">Select a voice for announcements</p>
-            </>
-          ) : (
-            <div className="p-3 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 rounded-md border border-yellow-200 dark:border-yellow-800">
-              <p className="text-sm">
-                Speech synthesis is not supported in this browser or environment. Voice features will not be available.
-              </p>
+          <p className="text-xs text-gray-500 mt-1 hidden sm:block">Use noise patterns instead of voice for phase transitions</p>
+          
+          {settings.noiseSystemOn && (
+            <div className="mt-2 space-y-3">
+              <div>
+                <label htmlFor="noiseVolume" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Noise Volume
+                </label>
+                <input
+                  id="noiseVolume"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={settings.noiseVolume}
+                  onChange={(e) => onSettingsChange({ ...settings, noiseVolume: parseFloat(e.target.value) })}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                  <span>Quiet</span>
+                  <span>{Math.round(settings.noiseVolume * 100)}%</span>
+                  <span>Loud</span>
+                </div>
+              </div>
+              
+              {/* Noise preview buttons removed */}
             </div>
           )}
         </div>
 
-        <div className="mb-4">
+        <div className="mb-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Visual Notifications</h3>
+            <h3 className="text-base font-semibold text-slate-800 dark:text-white">Visual Notifications</h3>
             <Toggle 
               id="visualNotifications"
               label=""
@@ -216,10 +163,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
               onChange={handleNotificationToggle} 
             />
           </div>
-          <p className="text-sm text-gray-500 mt-1">Show visual notifications during workout</p>
+          <p className="text-xs text-gray-500 mt-1 hidden sm:block">Show visual notifications during workout</p>
+          {settings.notificationsOn && (
+            <button
+              onClick={() => {
+                console.log('Test notification button clicked');
+                if ('Notification' in window && Notification.permission === 'granted') {
+                  try {
+                    new Notification('TEST NOTIFICATION', {
+                      icon: '/logo.png',
+                      badge: '/logo.png',
+                      tag: 'tabata-timer-test',
+                      renotify: true,
+                      requireInteraction: false,
+                      silent: true,
+                      body: '·',
+                      data: null
+                    });
+                  } catch (error) {
+                    console.error('Test notification error:', error);
+                  }
+                }
+              }}
+              className="mt-2 px-3 py-1.5 text-sm bg-brand-cyan-600 hover:bg-brand-cyan-700 text-white rounded-lg transition"
+            >
+              Test Notification
+            </button>
+          )}
         </div>
 
-        <div className="mb-4">
+        <div className="mb-3">
           <div className="flex items-center justify-between">
             <Toggle 
               id="sonicMode"
@@ -234,7 +207,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
             />
           </div>
           {settings.sonicModeOn && (
-            <div className="mt-2 ml-8">
+            <div className="mt-1 ml-6">
               <label htmlFor="sonicModeCycles" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Cycles before extended break
               </label>
@@ -244,16 +217,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                 min="1" max="10"
                 value={settings.sonicModeCycles}
                 onChange={(e) => onSettingsChange({ ...settings, sonicModeCycles: parseInt(e.target.value) || 3 })}
-                className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+                className="w-28 p-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
               />
             </div>
           )}
-          <p className="text-sm text-gray-500 mt-1">Long-duration audio sessions with ear protection reminders</p>
+          <p className="text-xs text-gray-500 mt-1 hidden sm:block">Long-duration audio sessions with ear protection reminders</p>
         </div>
 
-        <div className="mb-4">
+        <div className="mb-2">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Dark Mode</h3>
+            <h3 className="text-base font-semibold text-slate-800 dark:text-white">Dark Mode</h3>
             <Toggle 
               id="darkMode"
               label=""
@@ -261,7 +234,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
               onChange={(val) => onSettingsChange(s => ({...s, darkMode: val}))}
             />
           </div>
-          <p className="text-sm text-gray-500 mt-1">Use dark mode for the application</p>
+          <p className="text-xs text-gray-500 mt-1 hidden sm:block">Use dark mode for the application</p>
         </div>
       </div>
     </Modal>

@@ -1,17 +1,85 @@
-import React, { useEffect, useMemo, useState, useReducer } from 'react';
-import type { Workout, AppSettings } from '../types';
-import { useTimer, useAudio, useNotifications, useSpeech } from '../hooks';
-import { sonicModeReducer, initialSonicModeState } from '../reducers';
+import React, { useState, useEffect, useReducer, useRef } from 'react';
+import { Workout, AppSettings } from '../types';
+import { useTimer, useAudio, useNotifications } from '../hooks';
+import { useNoise } from '../hooks/useNoise';
 import { PlayIcon, PauseIcon, StopIcon } from './icons';
 
-const CircularProgress: React.FC<{ progress: number; children: React.ReactNode; colorClass: string }> = ({ progress, children, colorClass }) => {
-  const strokeWidth = 8;
-  const radius = 90;
-  const circumference = 2 * Math.PI * radius;
+// Sonic Mode reducer types and initial state
+interface SonicModeState {
+  phase: 'listen' | 'earRest';
+  timeLeft: number;
+  cycleCount: number;
+  isActive: boolean;
+}
+
+type SonicModeAction = 
+  | { type: 'TICK' }
+  | { type: 'TRANSITION' }
+  | { type: 'START' }
+  | { type: 'STOP' };
+
+const initialSonicModeState: SonicModeState = {
+  phase: 'listen',
+  timeLeft: 60 * 60, // 60 minutes in seconds
+  cycleCount: 1,
+  isActive: false,
+};
+
+function sonicModeReducer(state: SonicModeState, action: SonicModeAction): SonicModeState {
+  switch (action.type) {
+    case 'TICK':
+      return {
+        ...state,
+        timeLeft: Math.max(0, state.timeLeft - 1),
+      };
+    case 'TRANSITION':
+      if (state.phase === 'listen') {
+        // After listening, take WHO-recommended 10-minute break
+        return {
+          ...state,
+          phase: 'earRest',
+          timeLeft: 10 * 60, // 10 minutes (WHO standard)
+          cycleCount: state.cycleCount + 1,
+        };
+      } else {
+        // After break, go back to listening
+        return {
+          ...state,
+          phase: 'listen',
+          timeLeft: 60 * 60, // 60 minutes
+        };
+      }
+    case 'START':
+      return { ...initialSonicModeState, isActive: true };
+    case 'STOP':
+      return { ...initialSonicModeState, isActive: false };
+    default:
+      return state;
+  }
+}
+
+// Circular progress component
+interface CircularProgressProps {
+  progress: number;
+  colorClass: string;
+  children: React.ReactNode;
+  strokeWidth?: number;
+  size?: number;
+}
+
+const CircularProgress: React.FC<CircularProgressProps> = ({
+  progress,
+  colorClass,
+  children,
+  strokeWidth = 8,
+  size = 200,
+}) => {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
   const offset = circumference - progress * circumference;
 
   return (
-    <div className="relative w-64 h-64 md:w-80 md:h-80">
+    <div className="relative mx-auto w-[min(56vw,30vh)] h-[min(56vw,30vh)]">
       <svg className="w-full h-full" viewBox="0 0 200 200">
         <circle
           className="text-slate-200 dark:text-slate-700"
@@ -44,87 +112,156 @@ const CircularProgress: React.FC<{ progress: number; children: React.ReactNode; 
 
 interface TimerDisplayProps {
   workout: Workout | null;
-  onBack: () => void;
   settings: AppSettings;
   isPaused: boolean;
   setPaused: React.Dispatch<React.SetStateAction<boolean>>;
   onStop: () => void;
-  isSonicMode: boolean;
+  isSonicModeActive: boolean;
 }
 
-const TimerDisplay: React.FC<TimerDisplayProps> = ({ workout, onBack, settings, isPaused, setPaused, onStop, isSonicMode }) => {
+const TimerDisplay: React.FC<TimerDisplayProps> = ({ 
+  workout, 
+  settings, 
+  isPaused, 
+  setPaused, 
+  onStop, 
+  isSonicModeActive 
+}) => {
   const { status, resetTimer } = useTimer(workout, isPaused);
-  const { speak } = useSpeech(settings.voiceURI || null);
   const { playBeep } = useAudio();
   const { showNotification } = useNotifications();
 
+  // Create noise players that react to settings changes immediately
+  const tabataNoise = useNoise({
+    enabled: settings?.noiseSystemOn,
+    noiseType: settings?.tabataNoiseType,
+    volume: settings?.noiseVolume,
+  });
+  
+  const sonicNoise = useNoise({
+    enabled: settings?.noiseSystemOn,
+    noiseType: settings?.sonicNoiseType,
+    volume: settings?.noiseVolume,
+  });
+  
+  // Initialize Sonic Mode reducer
   const [sonicModeState, dispatchSonicModeAction] = useReducer(sonicModeReducer, initialSonicModeState);
-  const { phase: sonicPhase, timeLeft: sonicTimeLeft, cycleCount: sonicCycleCount, isActive: sonicModeActive } = sonicModeState;
+  const { phase: sonicPhase, timeLeft: sonicTimeLeft, cycleCount: sonicCycleCount } = sonicModeState;
+
+  // Handle Sonic Mode timer ticks and transitions
+  React.useEffect(() => {
+    if (!isSonicModeActive || isPaused) return;
+
+    const timer = setInterval(() => {
+      dispatchSonicModeAction({ type: 'TICK' });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isSonicModeActive, isPaused]);
+
+  // Handle Sonic Mode phase transitions
+  React.useEffect(() => {
+    if (isSonicModeActive && sonicTimeLeft <= 0) {
+      dispatchSonicModeAction({ type: 'TRANSITION' });
+    }
+  }, [isSonicModeActive, sonicTimeLeft]);
+
+  // Handle Sonic Mode activation/deactivation
+  React.useEffect(() => {
+    if (isSonicModeActive) {
+      dispatchSonicModeAction({ type: 'START' });
+    } else {
+      dispatchSonicModeAction({ type: 'STOP' });
+    }
+  }, [isSonicModeActive]);
 
   const { phase, currentSet, currentRoundIndex, timeLeftInPhase, totalPhaseTime, workoutCompleted } = status;
 
   const currentRound = workout && workout.rounds[currentRoundIndex];
 
+  // Avoid overlapping sounds: play the first immediately, then if another fires within window, delay it slightly
+  const lastPhaseSoundRef = useRef<{ t: number; src: 'tabata' | 'sonic' | '' }>({ t: 0, src: '' });
+  const requestPhaseSound = (src: 'tabata' | 'sonic', fn: () => void) => {
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const windowMs = 600; // sounds within this window are considered conflicting
+    const delayMs = 350;  // delay the second sound so they don’t overlap
+    const last = lastPhaseSoundRef.current;
+    if (now - last.t < windowMs) {
+      // schedule the new sound slightly later so both cues are heard without overlap
+      const scheduledAt = now + delayMs;
+      lastPhaseSoundRef.current = { t: scheduledAt, src };
+      setTimeout(() => {
+        fn();
+      }, delayMs);
+      return;
+    }
+    lastPhaseSoundRef.current = { t: now, src };
+    fn();
+  };
+
   useEffect(() => {
     if (workoutCompleted) {
-        const message = "Workout completed. Well done!";
-        if(settings.voiceOn) {
-          speak(message);
+        if(settings.noiseSystemOn) {
+          tabataNoise.playPhaseNoise('finished');
         }
-        if(settings.soundOn) playBeep(880, 0.5);
-        if(settings.notificationsOn) showNotification("Workout Finished!", { body: "Great job completing your workout." });
+        // Play completion chime sequence
+        if(settings.soundOn) {
+          playBeep(880, 0.2);
+          setTimeout(() => playBeep(988, 0.2), 250);
+          setTimeout(() => playBeep(1047, 0.3), 500);
+        }
+        if(settings.notificationsOn) showNotification("FINISHED!");
         setTimeout(onStop, 3000);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workoutCompleted, settings.voiceOn, settings.soundOn, settings.notificationsOn, onStop, playBeep, showNotification]);
+  }, [workoutCompleted, settings.soundOn, settings.notificationsOn, settings.noiseSystemOn, onStop, playBeep, showNotification, tabataNoise.playPhaseNoise]);
 
   useEffect(() => {
     // Announce phase changes
     if (isPaused || !currentRound) return;
 
     let announcement = '';
-    let notificationBody = '';
 
     if (timeLeftInPhase === totalPhaseTime) {
       switch (phase) {
         case 'prepare':
-            announcement = 'Get ready';
-            notificationBody = `The ${workout.name} workout is about to start.`;
+            announcement = 'PREPARE';
             break;
         case 'work':
-            announcement = currentRound.exerciseName;
-            const nextIsLastRound = currentRoundIndex === workout.rounds.length - 1;
-            notificationBody = `Next: ${nextIsLastRound ? 'Set Rest' : 'Rest'}`;
+            announcement = currentRound.exerciseName.toUpperCase();
             break;
         case 'rest':
-            announcement = 'Rest';
-            const nextRound = workout.rounds[currentRoundIndex + 1];
-            notificationBody = `Next: ${nextRound ? nextRound.exerciseName : 'Work'}`;
+            announcement = 'REST';
             break;
         case 'set_rest':
-            announcement = 'Rest between sets';
-            notificationBody = `Next: ${workout.rounds[0].exerciseName}`;
+            announcement = 'SET REST';
             break;
       }
     }
     
     if (announcement) {
-        if (settings.voiceOn) {
-          speak(announcement);
+        if (settings.noiseSystemOn) {
+          requestPhaseSound('tabata', () => tabataNoise.playPhaseNoise(phase));
         }
-        if (settings.notificationsOn) showNotification(announcement, { body: notificationBody });
-    }
-    
-    if (settings.soundOn && timeLeftInPhase === totalPhaseTime && phase !== 'prepare') {
-        playBeep(659, 0.2); // E5
+        if (settings.notificationsOn) showNotification(announcement);
     }
 
     if (settings.soundOn && timeLeftInPhase <= 3 && timeLeftInPhase > 0) {
-        playBeep(523, 0.1); // C5
+        playBeep(523, 0.1); // C5 - Countdown beeps
+    }
+
+    // Critical state transition beep - only when phase actually changes
+    const currentPhaseKey = `${phase}-${currentSet}-${currentRoundIndex}`;
+    if (settings.soundOn && !workoutCompleted && previousPhaseRef.current !== '' && previousPhaseRef.current !== currentPhaseKey) {
+        // Phase has changed, play the state transition beep ONCE
+        playBeep(784, 0.3); // G5 - Louder state change beep (direct call, no scheduling)
     }
     
+    // Update the previous phase reference
+    previousPhaseRef.current = currentPhaseKey;
+    
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, totalPhaseTime, timeLeftInPhase, settings, workout, currentRound, isPaused, playBeep, showNotification]);
+  }, [phase, totalPhaseTime, timeLeftInPhase, settings, workout, currentRound, isPaused, playBeep, showNotification, tabataNoise.playPhaseNoise]);
   
   const handleStop = () => {
     resetTimer();
@@ -133,7 +270,7 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({ workout, onBack, settings, 
   
   const progress = totalPhaseTime > 0 ? (totalPhaseTime - timeLeftInPhase) / totalPhaseTime : 0;
   
-  const phaseInfo = useMemo(() => {
+  const phaseInfo = React.useMemo(() => {
     switch(phase) {
         case 'prepare': return { text: 'PREPARE', color: 'text-yellow-500' };
         case 'work': return { text: 'WORK', color: 'text-brand-orange-500' };
@@ -144,255 +281,230 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({ workout, onBack, settings, 
     }
   }, [phase]);
 
-  const startTimer = () => {
-    if (settings.sonicModeOn) {
-      dispatchSonicModeAction({ type: 'START', settings });
-    } else {
-      setPaused(false);
-    }
-  };
-
-  const stopTimer = () => {
-    setPaused(true);
-  };
+  
 
   const [volume, setVolume] = useState<number>(0);
-  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
-  const [micStream, setMicStream] = useState<MediaStream | null>(null);
-  const [micSource, setMicSource] = useState<MediaStreamAudioSourceNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const rafIdRef = useRef<number | null>(null);
+  const previousPhaseRef = useRef<string>('');
 
-  // Handle Sonic Mode timer ticks
-  useEffect(() => {
-    if (!sonicModeActive) return;
-
-    const timer = setInterval(() => {
-      dispatchSonicModeAction({ type: 'TICK' });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [sonicModeActive]);
-
-  // Handle Sonic Mode phase transitions
-  useEffect(() => {
-    if (sonicModeActive && sonicTimeLeft === 0) {
-      dispatchSonicModeAction({ type: 'TRANSITION', settings });
-    }
-  }, [sonicModeActive, sonicTimeLeft, settings]);
-
-  // Handle side-effects of phase transitions (notifications, speech)
-  useEffect(() => {
-    if (!sonicModeActive) return;
+  // Handle side-effects of phase transitions (notifications, noise, beeps)
+  React.useEffect(() => {
+    if (!isSonicModeActive) return;
 
     switch (sonicPhase) {
       case 'listen':
         if (sonicTimeLeft === 60 * 60) { // Only announce at the start of the phase
-          const message = `Sonic Mode listening phase ${sonicCycleCount} of ${settings.sonicModeCycles}. Keep volume under 60 percent for hearing safety.`;
-          speak(message);
-          showNotification(`🎧 Sonic Mode: Listening Phase ${sonicCycleCount}/${settings.sonicModeCycles}`, { body: 'Keep volume under 60% (≈80 dBA)' });
+          if (settings.noiseSystemOn) {
+            requestPhaseSound('sonic', () => sonicNoise.playPhaseNoise('sonic_start'));
+          } else if (settings.soundOn) {
+            // Two short beeps to signal start
+            requestPhaseSound('sonic', () => playBeep(880, 0.15));
+            setTimeout(() => requestPhaseSound('sonic', () => playBeep(880, 0.15)), 250);
+          }
+          if (settings.notificationsOn) {
+            showNotification('SONIC MODE');
+          }
         }
         break;
       case 'earRest':
-        speak('Ear break. Remove earbuds and let your ears rest.');
-        showNotification('🛑 Ear Break', { body: 'Remove earbuds and rest your ears' });
-        break;
-      case 'extendedBreak':
-        speak('Great job! Take a longer break now to protect your hearing health.');
-        showNotification('✅ Great job!', { body: 'Take a longer break now to protect your hearing health.' });
+        if (sonicTimeLeft === 10 * 60) { // Only announce at the start of the break
+          if (settings.noiseSystemOn) {
+            requestPhaseSound('sonic', () => sonicNoise.playPhaseNoise('sonic_break'));
+          } else if (settings.soundOn) {
+            // Lower chime to signal rest
+            requestPhaseSound('sonic', () => playBeep(440, 0.3));
+          }
+          if (settings.notificationsOn) {
+            showNotification('EAR REST');
+          }
+        }
         break;
     }
-  }, [sonicPhase, sonicModeActive, speak, showNotification, settings.sonicModeCycles, sonicCycleCount, sonicTimeLeft]);
+  }, [sonicPhase, isSonicModeActive, showNotification, sonicCycleCount, sonicTimeLeft, settings.noiseSystemOn, sonicNoise.playPhaseNoise, playBeep, settings.soundOn]);
 
-  useEffect(() => {
-    // Initialize audio context and analyser for volume monitoring
-    if (sonicModeActive && sonicPhase === 'listen') {
+  // Initialize audio context and analyser for volume monitoring
+  React.useEffect(() => {
+    if (isSonicModeActive && sonicPhase === 'listen') {
+      let running = true;
       const initAudio = async () => {
         try {
           const context = new (window.AudioContext || (window as any).webkitAudioContext)();
           const analyserNode = context.createAnalyser();
           analyserNode.fftSize = 2048;
-          
+
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
           const source = context.createMediaStreamSource(stream);
           source.connect(analyserNode);
-          
-          setAudioContext(context);
-          setMicStream(stream);
-          setMicSource(source);
-          
+
+          audioContextRef.current = context;
+          micStreamRef.current = stream;
+
           // Start volume monitoring
           const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
-          
+
           const checkVolume = () => {
+            if (!running) return;
             analyserNode.getByteFrequencyData(dataArray);
-            
+
             let sum = 0;
             for (let i = 0; i < dataArray.length; i++) {
               sum += dataArray[i];
             }
-            
+
             const average = sum / dataArray.length;
-            const volumePercent = Math.min(100, Math.max(0, average / 255 * 100));
-            
+            const volumePercent = Math.min(100, Math.max(0, (average / 255) * 100));
             setVolume(volumePercent);
-            
-            requestAnimationFrame(checkVolume);
+
+            rafIdRef.current = requestAnimationFrame(checkVolume);
           };
-          
-          checkVolume();
+
+          rafIdRef.current = requestAnimationFrame(checkVolume);
         } catch (err) {
           console.error('Error initializing audio:', err);
         }
       };
-      
+
       initAudio();
+
+      // Clean up when leaving listen phase or deactivating Sonic Mode
+      return () => {
+        running = false;
+        if (rafIdRef.current !== null) {
+          cancelAnimationFrame(rafIdRef.current);
+          rafIdRef.current = null;
+        }
+        if (micStreamRef.current) {
+          micStreamRef.current.getTracks().forEach((track) => track.stop());
+          micStreamRef.current = null;
+        }
+        if (audioContextRef.current) {
+          audioContextRef.current.close();
+          audioContextRef.current = null;
+        }
+      };
     }
-    
+
+    // If not in listen phase, ensure any previous resources are cleaned
     return () => {
-      if (micSource) {
-        micSource.disconnect();
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
       }
-      if (micStream) {
-        micStream.getTracks().forEach(track => track.stop());
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach((track) => track.stop());
+        micStreamRef.current = null;
       }
-      if (audioContext) {
-        audioContext.close();
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
       }
     };
-  }, [sonicModeActive, sonicPhase]);
+  }, [isSonicModeActive, sonicPhase]);
 
-  // If in dedicated Sonic Mode, we don't show the workout controls
-  if (isSonicMode && !workout) {
-    return (
-      <div className="max-w-2xl mx-auto bg-white dark:bg-slate-800 rounded-3xl shadow-xl overflow-hidden">
-        <div className="p-8">
-          <h2 className="text-3xl font-bold text-center text-brand-cyan-700 dark:text-brand-cyan-400 mb-6">Sonic Mode</h2>
-          <div className="text-center">
-            <p className="text-lg text-slate-700 dark:text-slate-300 mb-4">Protecting your hearing during long listening sessions</p>
-            <div className="flex justify-center space-x-4 mb-6">
-              <button 
-                onClick={() => dispatchSonicModeAction({ type: 'START', settings })}
-                className="px-6 py-3 bg-brand-cyan-600 hover:bg-brand-cyan-700 text-white font-semibold rounded-full transition duration-300"
-              >
-                Start Sonic Mode
-              </button>
-              <button 
-                onClick={onBack}
-                className="px-6 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-full transition duration-300"
-              >
-                Back
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // If there's no workout, we cannot show the main timer
+  // Render
   if (!workout) {
     return null;
   }
 
+  const sonicPhaseBase = sonicPhase === 'listen' ? 60 * 60 : 10 * 60;
+
   return (
-    <div className="h-full flex flex-col items-center text-slate-800 dark:text-slate-100 p-4 md:p-6">
-      <div className="flex-1 flex flex-col items-center justify-center w-full overflow-hidden">
-        <div className="text-center mb-4 md:mb-8">
-            <p className="text-lg text-slate-500 dark:text-slate-400">Set {currentSet} / {workout.sets}</p>
-            <p className="text-lg text-slate-500 dark:text-slate-400">Round {phase === 'set_rest' ? workout.rounds.length : (currentRoundIndex ?? 0) + 1} / {workout.rounds.length}</p>
+    <div className="flex flex-col items-center justify-center min-h-[100svh] px-3 sm:px-4 py-0 sm:py-0 gap-2 sm:gap-3 overflow-x-hidden">
+      {/* Sonic Mode status bar */}
+      {isSonicModeActive && (
+        <div className="w-full max-w-[18rem] bg-slate-100 dark:bg-slate-800 rounded-lg p-1.5 mb-2 mx-auto">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">
+              Sonic Mode: {sonicPhase === 'listen' ? 'Active' : 'Ear Rest'}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {Math.floor(sonicTimeLeft / 60)}:{String(sonicTimeLeft % 60).padStart(2, '0')}
+            </span>
+          </div>
+          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5">
+            <div
+              className={`h-1.5 rounded-full ${sonicPhase === 'listen' ? 'bg-blue-500' : 'bg-green-500'}`}
+              style={{ width: `${(sonicTimeLeft / sonicPhaseBase) * 100}%` }}
+            />
+          </div>
+          {/* Cycle count intentionally removed to save vertical space */}
+        </div>
+      )}
+
+      {/* Main timer display */}
+      <div className="w-full max-w-sm sm:max-w-md mb-1 mx-auto">
+        <div className="text-center mb-1">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 px-2 leading-tight">
+            Set {currentSet}/{workout.sets} · Round {phase === 'set_rest' ? workout.rounds.length : (currentRoundIndex + 1)}/{workout.rounds.length}
+          </p>
         </div>
 
         <CircularProgress progress={progress} colorClass={phaseInfo.color}>
-            <div className={`text-xl font-bold uppercase tracking-widest ${phaseInfo.color}`}>
-                {phaseInfo.text}
-            </div>
-            <div className="text-6xl md:text-7xl font-mono font-bold my-2">
-                {String(Math.floor(timeLeftInPhase / 60)).padStart(2, '0')}:{String(timeLeftInPhase % 60).padStart(2, '0')}
-            </div>
-            <div className="text-lg md:text-xl font-semibold h-14 truncate px-2">
-                {phase === 'work' && currentRound?.exerciseName}
-            </div>
+          <div className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${phaseInfo.color}`}>
+            {phaseInfo.text}
+          </div>
+          <div className="font-mono font-bold my-1 sm:my-2 text-[clamp(20px,10vw,40px)]">
+            {String(Math.floor(timeLeftInPhase / 60)).padStart(2, '0')}:{String(timeLeftInPhase % 60).padStart(2, '0')}
+          </div>
+          <div className="text-sm sm:text-base md:text-lg font-semibold h-8 sm:h-10 px-2 max-w-[85%] whitespace-nowrap overflow-hidden text-ellipsis mx-auto leading-tight">
+            {phase === 'work' && currentRound?.exerciseName}
+          </div>
         </CircularProgress>
 
-        <div className="mt-4 md:mt-8 h-8 text-center">
-            {phase !== 'set_rest' && phase !== 'finished' && phase !== 'prepare' && currentRound && (
-                <p className="text-base text-slate-500 dark:text-slate-400">
-                    Next: {phase === 'work' ? 'Rest' : (currentRoundIndex < workout.rounds.length - 1 ? workout.rounds[currentRoundIndex + 1]?.exerciseName : 'Set Rest')}
-                </p>
-            )}
-        </div>
-      </div>
-
-      <div className="w-full flex items-center justify-center space-x-8 pt-4">
-        <button onClick={handleStop} className="p-4 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-200 transition">
-          <StopIcon className="w-8 h-8"/>
-        </button>
-        <button onClick={isPaused ? startTimer : stopTimer} className="p-6 rounded-full bg-brand-cyan-600 hover:bg-brand-cyan-700 text-white shadow-lg transform hover:scale-105 transition">
-          {isPaused ? <PlayIcon className="w-10 h-10" /> : <PauseIcon className="w-10 h-10" />}
-        </button>
-      </div>
-
-      {settings.sonicModeOn && (
-        <div className="mt-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-semibold">Sonic Mode 🎶🛡️</h3>
-            <button 
-              onClick={() => sonicModeActive ? dispatchSonicModeAction({ type: 'STOP' }) : dispatchSonicModeAction({ type: 'START', settings })}
-              className={`px-4 py-2 rounded ${sonicModeActive ? 'bg-red-500 text-white' : 'bg-brand-cyan-600 text-white'}`}
-            >
-              {sonicModeActive ? 'Stop' : 'Start'}
-            </button>
-          </div>
-          
-          {sonicModeActive && (
-            <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg">
-              <div className="mb-2">
-                <div className="flex justify-between text-sm">
-                  <span>Phase: {sonicPhase === 'listen' ? 'Listening' : sonicPhase === 'earRest' ? 'Ear Rest' : 'Extended Break'}</span>
-                  <span>Cycle: {sonicCycleCount}/{settings.sonicModeCycles}</span>
-                </div>
-                <div className="text-lg font-bold">
-                  {Math.floor(sonicTimeLeft / 60)}:{String(sonicTimeLeft % 60).padStart(2, '0')}
-                </div>
-              </div>
-              
-              {sonicPhase === 'listen' && (
-                <div className="text-sm text-blue-600 dark:text-blue-400">
-                  🎧 Keep volume under 60% (≈80 dBA) for hearing safety
-                </div>
-              )}
-              
-              {sonicPhase === 'earRest' && (
-                <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                  🛑 Remove earbuds and let your ears rest
-                </div>
-              )}
-              
-              {sonicPhase === 'extendedBreak' && (
-                <div className="text-sm text-green-600 dark:text-green-400">
-                  ✅ Great job! Take a longer break to protect your hearing
-                </div>
-              )}
-              
-              <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                ⚠️ Limit listening above 85 dBA to under 2 hours/day. For ≤80 dBA, stay under 8 hours.
-              </div>
-            </div>
+        <div className="mt-2 sm:mt-3 md:mt-4 h-4 sm:h-5 text-center">
+          {phase !== 'set_rest' && phase !== 'finished' && phase !== 'prepare' && currentRound && (
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 px-3 truncate">
+              Next: {phase === 'work' ? 'Rest' : (currentRoundIndex < workout.rounds.length - 1 ? workout.rounds[currentRoundIndex + 1]?.exerciseName : 'Set Rest')}
+            </p>
           )}
         </div>
+      </div>
+
+      <div className="mt-2 flex justify-center space-x-3">
+        <button
+          onClick={handleStop}
+          className="px-3.5 py-1.5 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-200 transition"
+          aria-label="Stop timer"
+        >
+          <StopIcon className="w-6 h-6" />
+        </button>
+        <button
+          onClick={() => setPaused(!isPaused)}
+          className="px-3.5 py-1.5 rounded-full bg-brand-cyan-600 hover:bg-brand-cyan-700 text-white shadow-md transform hover:scale-105 transition"
+          aria-label={isPaused ? 'Resume' : 'Pause'}
+        >
+          {isPaused ? <PlayIcon className="w-6 h-6" /> : <PauseIcon className="w-6 h-6" />}
+        </button>
+      </div>
+
+      {/* Volume indicator (Sonic Mode listening) */}
+      {isSonicModeActive && (
+        <div className="mt-1.5 w-full max-w-[16rem]">
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-slate-500 dark:text-slate-400">Listening</span>
+            <span className="text-slate-500 dark:text-slate-400">{Math.round(volume)}%</span>
+          </div>
+          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5">
+            <div
+              className={`h-1.5 rounded-full ${volume > 60 ? 'bg-red-500' : 'bg-green-500'}`}
+              style={{ width: `${Math.min(100, volume)}%` }}
+            />
+          </div>
+          <p className="text-[10px] mt-0.5 text-slate-500 dark:text-slate-400">
+            {volume > 60 ? '⚠️ Volume too high! Lower to protect your hearing' : 'Volume at safe level'}
+          </p>
+        </div>
       )}
-      
-      {sonicModeActive && sonicPhase === 'listen' && (
-        <div className="mt-4">
-          <div className="text-sm mb-2">Current Volume: {volume.toFixed(0)}%</div>
-          <div className="w-full bg-gray-200 rounded-full h-4 dark:bg-gray-700">
-            <div 
-              className="bg-brand-cyan-600 h-4 rounded-full transition-all duration-200" 
-              style={{ width: `${volume}%` }}
-            ></div>
-          </div>
-          <div className="text-xs mt-2 text-slate-500 dark:text-slate-400">
-            Keep below 60% for safe listening
-          </div>
+
+      {isSonicModeActive && (
+        <div className="mt-1 w-full max-w-[18rem] mx-auto px-3 text-[11px] text-center text-slate-600 dark:text-slate-300">
+          {sonicPhase === 'listen' ? (
+            <p className="whitespace-normal break-words">🎧 Keep volume under 60% for safe listening (WHO 60/60 rule)</p>
+          ) : (
+            <p className="whitespace-normal break-words">🛑 Remove earbuds and rest in quiet environment (&lt;55 dBA)</p>
+          )}
         </div>
       )}
     </div>

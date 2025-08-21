@@ -102,117 +102,7 @@ export function useAudio() {
   return { playBeep };
 }
 
-// useVoices Hook
-export function useVoices() {
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-
-  useEffect(() => {
-    // Only run on client side
-    if (typeof window === 'undefined' || !window.speechSynthesis) {
-      return;
-    }
-    
-    const synth = window.speechSynthesis;
-    const updateVoices = () => {
-      setVoices(synth.getVoices());
-    };
-
-    // If voices are already available, set them immediately
-    if (synth.getVoices().length > 0) {
-      updateVoices();
-    }
-
-    synth.addEventListener('voiceschanged', updateVoices);
-    
-    return () => {
-      synth.removeEventListener('voiceschanged', updateVoices);
-    };
-  }, []);
-
-  return voices;
-}
-
-// useSpeech Hook
-export const useSpeech = (voiceURI: string | null) => {
-  const [synth, setSynth] = useState<SpeechSynthesis | null>(null);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const voicesLoaded = useRef(false);
-
-  const updateVoices = useCallback(() => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      const availableVoices = window.speechSynthesis.getVoices();
-      if (availableVoices.length > 0) {
-        setVoices(availableVoices);
-        voicesLoaded.current = true;
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      setSynth(window.speechSynthesis);
-      
-      // Initial voices load
-      updateVoices();
-      
-      // Set up event listener for voice changes
-      window.speechSynthesis.onvoiceschanged = updateVoices;
-      
-      // Cleanup
-      return () => {
-        window.speechSynthesis.onvoiceschanged = null;
-      };
-    } else {
-      console.error('Web Speech API is not supported in this browser.');
-    }
-  }, [updateVoices]);
-
-  const speak = useCallback((text: string) => {
-    // Check if Web Speech API is available
-    if (typeof window === 'undefined' || !window.speechSynthesis) {
-      console.error('Speech synthesis not available in this browser or environment.');
-      return;
-    }
-    
-    if (!synth) {
-      console.error('Speech synthesis not available');
-      return;
-    }
-
-    // Create a new utterance
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.9;
-    utterance.pitch = 1.1;
-
-    // Always get fresh voices list when speaking
-    const availableVoices = window.speechSynthesis.getVoices();
-    
-    if (voiceURI) {
-      // First try to find the voice in the available voices
-      let selectedVoice = availableVoices.find(voice => voice.voiceURI === voiceURI);
-      
-      // If not found, try to find a voice with matching language (as a fallback)
-      if (!selectedVoice && voiceURI.includes('-')) {
-        const lang = voiceURI.split('-')[0];
-        selectedVoice = availableVoices.find(voice => voice.lang.startsWith(lang));
-      }
-      
-      if (selectedVoice) {
-        utterance.voice = selectedVoice;
-        console.log('Using voice:', selectedVoice.name, selectedVoice.lang);
-      } else {
-        console.warn(`Voice with URI ${voiceURI} not found. Using default voice.`);
-        console.log('Available voices:', availableVoices.map(v => `${v.name} (${v.voiceURI})`));
-      }
-    }
-
-    // Cancel any current speech and speak the new utterance
-    synth.cancel();
-    synth.speak(utterance);
-  }, [synth, voiceURI]);
-
-  return { speak, voices };
-}
+// Voice features removed
 
 // useTimer Hook
 const PREPARE_TIME = 5;
@@ -309,40 +199,31 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
 export function useNotifications() {
   const showNotification = useCallback((title: string, options?: NotificationOptions) => {
     // Basic browser support check
-    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-      console.warn('This browser does not support notifications or service workers.');
+    if (!('Notification' in window)) {
+      console.warn('This browser does not support notifications.');
       return;
     }
 
     // Permission check
     if (Notification.permission !== 'granted') {
-      // Don't log here, the settings modal already handles user feedback.
       return;
     }
     
-    // Only show notification if the page is not visible, to avoid being annoying.
-    if (document.hidden) {
-      // Use navigator.serviceWorker.ready to ensure we have an active service worker.
-      // This is the most robust way to handle this, avoiding race conditions on load.
-      navigator.serviceWorker.ready.then(registration => {
-        // We message the active service worker, which then shows the notification.
-        // This ensures the notification is created from a trusted background context.
-        if (registration.active) {
-            registration.active.postMessage({
-              type: 'show-notification',
-              title: title,
-              options: { 
-                ...options,
-                tag: 'tabata-timer-notification', // Use a tag to prevent spamming notifications.
-                renotify: true, // Re-notify even if a notification with the same tag is active.
-              },
-            });
-        } else {
-             console.error("Service worker is ready, but no active worker found. Cannot show notification.");
-        }
-      }).catch(error => {
-          console.error("Error with service worker readiness, cannot show notification:", error);
+    // Use direct notification API to avoid service worker URL issues
+    try {
+      new Notification(title, {
+        icon: '/logo.png',
+        badge: '/logo.png',
+        tag: 'tabata-timer-notification',
+        renotify: true,
+        requireInteraction: false,
+        silent: true,
+        body: '·', // Single dot character to override localhost URL
+        data: null,
+        ...options
       });
+    } catch (error) {
+      console.error('Error showing notification:', error);
     }
   }, []);
 

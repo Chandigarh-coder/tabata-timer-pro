@@ -105,6 +105,7 @@ const WorkoutSetup: React.FC<WorkoutSetupProps> = ({ workout, setWorkout, onStar
   };
 
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+     e.preventDefault();
      if (draggedItemIndex === null || draggedItemIndex === index) return;
      const newRounds = [...workout.rounds];
      const draggedItem = newRounds.splice(draggedItemIndex, 1)[0];
@@ -150,18 +151,27 @@ const WorkoutSetup: React.FC<WorkoutSetupProps> = ({ workout, setWorkout, onStar
 
         {/* Scrollable Rounds List */}
         <div className="flex-grow py-6 overflow-y-auto min-h-0">
-          <div className="flex justify-between items-center mb-3 px-1">
-              <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200">
-                  Rounds ({workout.rounds.length})
-              </h2>
-              <div className="flex items-center space-x-2">
-                  <button onClick={onLoad} title="Load Workout" className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors">
-                      <FolderOpenIcon />
-                  </button>
-                  <button onClick={onSave} title="Save Workout" className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors">
-                      <SaveIcon />
-                  </button>
-              </div>
+          <div className="flex items-center mb-3 px-1 gap-3">
+            <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+              Rounds ({workout.rounds.length})
+            </h2>
+            <div className="flex-1 flex justify-center">
+              <button
+                onClick={onStart}
+                className="px-6 py-3 bg-brand-cyan-600 hover:bg-brand-cyan-700 text-white font-bold rounded-none shadow-md shadow-brand-cyan-500/30 transition-colors"
+                aria-label="Start"
+              >
+                Start
+              </button>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button onClick={onLoad} title="Load Workout" className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors">
+                <FolderOpenIcon />
+              </button>
+              <button onClick={onSave} title="Save Workout" className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors">
+                <SaveIcon />
+              </button>
+            </div>
           </div>
           
           <div className="space-y-3">
@@ -193,14 +203,6 @@ const WorkoutSetup: React.FC<WorkoutSetupProps> = ({ workout, setWorkout, onStar
           <button onClick={addRound} className="w-full flex items-center justify-center space-x-2 bg-gradient-to-br from-orange-200 via-pink-200 to-cyan-200 dark:from-red-900 dark:via-purple-900 dark:to-teal-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 font-semibold py-3 px-4 rounded-xl transition">
             <PlusIcon />
             <span>Add Round</span>
-          </button>
-        </div>
-         <div className="pb-4 flex-shrink-0">
-           <button
-            onClick={onStart}
-            className="w-full bg-brand-cyan-600 hover:bg-brand-cyan-700 text-white font-bold text-lg py-4 px-4 rounded-xl shadow-lg shadow-brand-cyan-500/30 transform hover:scale-[1.02] transition"
-          >
-            Start Workout
           </button>
         </div>
       </div>
