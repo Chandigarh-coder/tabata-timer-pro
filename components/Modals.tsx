@@ -174,7 +174,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                       icon: '/logo.png',
                       badge: '/logo.png',
                       tag: 'tabata-timer-test',
-                      renotify: true,
                       requireInteraction: false,
                       silent: true,
                       body: '·',

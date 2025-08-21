@@ -215,7 +215,6 @@ export function useNotifications() {
         icon: '/logo.png',
         badge: '/logo.png',
         tag: 'tabata-timer-notification',
-        renotify: true,
         requireInteraction: false,
         silent: true,
         body: '·', // Single dot character to override localhost URL
