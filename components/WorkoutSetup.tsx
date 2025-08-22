@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import type { Workout, Round } from '../types';
-import { PlusIcon, GripVerticalIcon, TrashIcon, SaveIcon, FolderOpenIcon } from './icons';
+import { PlusIcon, GripVerticalIcon, TrashIcon } from './icons';
 
 interface WorkoutSetupProps {
   workout: Workout;
   setWorkout: React.Dispatch<React.SetStateAction<Workout>>;
   onStart: () => void;
-  onSave: () => void;
-  onLoad: () => void;
 }
 
 const RoundCard: React.FC<{
@@ -151,27 +149,18 @@ const WorkoutSetup: React.FC<WorkoutSetupProps> = ({ workout, setWorkout, onStar
 
         {/* Scrollable Rounds List */}
         <div className="flex-grow py-6 overflow-y-auto min-h-0">
-          <div className="flex items-center mb-3 px-1 gap-3">
-            <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+          <div className="flex items-center mb-3 px-1">
+            <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 flex-1">
               Rounds ({workout.rounds.length})
             </h2>
-            <div className="flex-1 flex justify-center">
-              <button
-                onClick={onStart}
-                className="px-6 py-3 bg-brand-cyan-600 hover:bg-brand-cyan-700 text-white font-bold rounded-none shadow-md shadow-brand-cyan-500/30 transition-colors"
-                aria-label="Start"
-              >
-                Start
-              </button>
-            </div>
-            <div className="flex items-center space-x-2">
-              <button onClick={onLoad} title="Load Workout" className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors">
-                <FolderOpenIcon />
-              </button>
-              <button onClick={onSave} title="Save Workout" className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors">
-                <SaveIcon />
-              </button>
-            </div>
+            <button
+              onClick={onStart}
+              className="px-6 py-3 bg-brand-cyan-600 hover:bg-brand-cyan-700 text-white font-bold rounded-none shadow-md shadow-brand-cyan-500/30 transition-colors"
+              aria-label="Start"
+            >
+              Start
+            </button>
+            <div className="flex-1"></div>
           </div>
           
           <div className="space-y-3">

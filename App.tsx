@@ -3,7 +3,7 @@ import type { Workout, AppSettings, ToastMessage } from './types';
 import { useLocalStorage, useDarkMode } from './hooks';
 import WorkoutSetup from './components/WorkoutSetup';
 import TimerDisplay from './components/TimerDisplay';
-import { SettingsModal, SavedWorkoutsModal } from './components/Modals';
+import { SettingsModal } from './components/Modals';
 import { SettingsIcon } from './components/icons';
 import { ToastContainer } from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -23,7 +23,6 @@ const DEFAULT_WORKOUT: Workout = {
 
 const App: React.FC = () => {
   const [currentWorkout, setCurrentWorkout] = useState<Workout>(DEFAULT_WORKOUT);
-  const [savedWorkouts, setSavedWorkouts] = useLocalStorage<Workout[]>('savedWorkouts', []);
   const [view, setView] = useState<'setup' | 'timer'>('setup');
   const [isPaused, setPaused] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -37,15 +36,10 @@ const App: React.FC = () => {
       notificationsOn: false,
       sonicModeOn: false,
       sonicModeCycles: 3,
-      noiseSystemOn: true,
-      tabataNoiseType: 'beep',
-      sonicNoiseType: 'click',
-      noiseVolume: 0.5,
   });
   
   
   const [isSettingsModalOpen, setSettingsModalOpen] = useState(false);
-  const [isLoadModalOpen, setLoadModalOpen] = useState(false);
 
   // Sync dark mode between setting and system hook
   useEffect(() => {
@@ -63,17 +57,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // One-time migration: force fixed noise types
-  useEffect(() => {
-    setSettings((s) => {
-      const next = { ...s };
-      let changed = false;
-      if (s.tabataNoiseType !== 'beep') { next.tabataNoiseType = 'beep'; changed = true; }
-      if (s.sonicNoiseType !== 'click') { next.sonicNoiseType = 'click'; changed = true; }
-      return changed ? next : s;
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleStartWorkout = useCallback(() => {
     setView('timer');
@@ -121,36 +104,15 @@ const App: React.FC = () => {
     setToasts((prevToasts) => prevToasts.filter((toast) => toast.id !== id));
   }, []);
   
-  const handleSaveWorkout = useCallback(() => {
-    const isExisting = savedWorkouts.some(w => w.id === currentWorkout.id);
-    if (isExisting) {
-        setSavedWorkouts(savedWorkouts.map(w => w.id === currentWorkout.id ? currentWorkout : w));
-    } else {
-        setSavedWorkouts([...savedWorkouts, { ...currentWorkout, id: crypto.randomUUID() }]);
-    }
-    addToast(`Workout "${currentWorkout.name}" saved!`, 'success');
-  }, [currentWorkout, savedWorkouts, setSavedWorkouts, addToast]);
 
-  const handleLoadWorkout = useCallback((workoutToLoad: Workout) => {
-    setCurrentWorkout(workoutToLoad);
-    setLoadModalOpen(false);
-  }, []);
-  
-  const handleDeleteWorkout = useCallback((workoutId: string) => {
-    if (window.confirm("Are you sure you want to delete this workout?")) {
-        setSavedWorkouts(savedWorkouts.filter(w => w.id !== workoutId));
-    }
-  }, [savedWorkouts, setSavedWorkouts]);
 
   const memoizedWorkoutSetup = useMemo(() => (
     <WorkoutSetup 
         workout={currentWorkout} 
         setWorkout={setCurrentWorkout} 
         onStart={handleStartWorkout}
-        onSave={handleSaveWorkout}
-        onLoad={() => setLoadModalOpen(true)}
     />
-  ), [currentWorkout, handleStartWorkout, handleSaveWorkout]);
+  ), [currentWorkout, handleStartWorkout]);
   
 
   return (
@@ -183,13 +145,6 @@ const App: React.FC = () => {
           onSettingsChange={handleSettingsChange}
           addToast={addToast}
           onSonicMode={handleSonicMode}
-        />
-        <SavedWorkoutsModal
-          isOpen={isLoadModalOpen}
-          onClose={() => setLoadModalOpen(false)}
-          savedWorkouts={savedWorkouts}
-          onLoad={handleLoadWorkout}
-          onDelete={handleDeleteWorkout}
         />
       </div>
     </ErrorBoundary>

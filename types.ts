@@ -30,10 +30,6 @@ export interface AppSettings {
   darkMode: boolean;
   sonicModeOn: boolean;
   sonicModeCycles: number; // Number of cycles before extended break
-  noiseSystemOn: boolean; // Enable noise system
-  tabataNoiseType: NoiseType; // Noise type for Tabata timer
-  sonicNoiseType: NoiseType; // Noise type for Sonic Mode
-  noiseVolume: number; // Volume for noise system (0-1)
 }
 
 export type NoiseType = 'white' | 'pink' | 'brown' | 'beep' | 'chime' | 'click' | 'none';

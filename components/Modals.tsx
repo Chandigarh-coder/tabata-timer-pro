@@ -43,7 +43,7 @@ interface SettingsModalProps {
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings, onSettingsChange, addToast, onSonicMode }) => {
   const Toggle = ({ id, label, checked, onChange, disabled }: { id?: string; label: string; checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean }) => (
-    <label className={`flex items-center justify-between py-2 border-b border-slate-200 dark:border-slate-700 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+    <label className={`flex items-center justify-between py-2 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
       <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
       <div className="relative">
         <input
@@ -113,45 +113,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
 
         {/* Voice settings removed */}
 
-        <div className="mb-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-slate-800 dark:text-white">Noise System</h3>
-            <Toggle
-              id="noiseSystem"
-              label=""
-              checked={settings.noiseSystemOn}
-              onChange={(val) => onSettingsChange(s => ({...s, noiseSystemOn: val}))}
-            />
-          </div>
-          <p className="text-xs text-gray-500 mt-1 hidden sm:block">Use noise patterns instead of voice for phase transitions</p>
-          
-          {settings.noiseSystemOn && (
-            <div className="mt-2 space-y-3">
-              <div>
-                <label htmlFor="noiseVolume" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Noise Volume
-                </label>
-                <input
-                  id="noiseVolume"
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.1"
-                  value={settings.noiseVolume}
-                  onChange={(e) => onSettingsChange({ ...settings, noiseVolume: parseFloat(e.target.value) })}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                  <span>Quiet</span>
-                  <span>{Math.round(settings.noiseVolume * 100)}%</span>
-                  <span>Loud</span>
-                </div>
-              </div>
-              
-              {/* Noise preview buttons removed */}
-            </div>
-          )}
-        </div>
 
         <div className="mb-3">
           <div className="flex items-center justify-between">
@@ -192,21 +153,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
         </div>
 
         <div className="mb-3">
-          <div className="flex items-center justify-between">
-            <Toggle 
-              id="sonicMode"
-              label="Enable Sonic Mode (hearing protection)"
-              checked={settings.sonicModeOn}
-              onChange={(checked) => {
-                onSettingsChange({ ...settings, sonicModeOn: checked });
-                if (checked) {
-                  onSonicMode();
-                }
-              }}
-            />
-          </div>
+          <Toggle 
+            id="sonicMode"
+            label="Enable Sonic Mode (hearing protection)"
+            checked={settings.sonicModeOn}
+            onChange={(checked) => {
+              onSettingsChange({ ...settings, sonicModeOn: checked });
+              if (checked) {
+                onSonicMode();
+              }
+            }}
+          />
           {settings.sonicModeOn && (
-            <div className="mt-1 ml-6">
+            <div className="mt-2">
               <label htmlFor="sonicModeCycles" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Cycles before extended break
               </label>

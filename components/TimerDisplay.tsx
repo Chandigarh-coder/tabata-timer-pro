@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useReducer, useRef } from 'react';
 import { Workout, AppSettings } from '../types';
 import { useTimer, useAudio, useNotifications } from '../hooks';
-import { useNoise } from '../hooks/useNoise';
 import { PlayIcon, PauseIcon, StopIcon } from './icons';
 
 // Sonic Mode reducer types and initial state
@@ -131,18 +130,7 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
   const { playBeep } = useAudio();
   const { showNotification } = useNotifications();
 
-  // Create noise players that react to settings changes immediately
-  const tabataNoise = useNoise({
-    enabled: settings?.noiseSystemOn,
-    noiseType: settings?.tabataNoiseType,
-    volume: settings?.noiseVolume,
-  });
   
-  const sonicNoise = useNoise({
-    enabled: settings?.noiseSystemOn,
-    noiseType: settings?.sonicNoiseType,
-    volume: settings?.noiseVolume,
-  });
   
   // Initialize Sonic Mode reducer
   const [sonicModeState, dispatchSonicModeAction] = useReducer(sonicModeReducer, initialSonicModeState);
@@ -201,9 +189,6 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
 
   useEffect(() => {
     if (workoutCompleted) {
-        if(settings.noiseSystemOn) {
-          tabataNoise.playPhaseNoise('finished');
-        }
         // Play completion chime sequence
         if(settings.soundOn) {
           playBeep(880, 0.2);
@@ -214,7 +199,7 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
         setTimeout(onStop, 3000);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workoutCompleted, settings.soundOn, settings.notificationsOn, settings.noiseSystemOn, onStop, playBeep, showNotification, tabataNoise.playPhaseNoise]);
+  }, [workoutCompleted, settings.soundOn, settings.notificationsOn, onStop, playBeep, showNotification]);
 
   useEffect(() => {
     // Announce phase changes
@@ -240,9 +225,6 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
     }
     
     if (announcement) {
-        if (settings.noiseSystemOn) {
-          requestPhaseSound('tabata', () => tabataNoise.playPhaseNoise(phase));
-        }
         if (settings.notificationsOn) showNotification(announcement);
     }
 
@@ -261,7 +243,7 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
     previousPhaseRef.current = currentPhaseKey;
     
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, totalPhaseTime, timeLeftInPhase, settings, workout, currentRound, isPaused, playBeep, showNotification, tabataNoise.playPhaseNoise]);
+  }, [phase, totalPhaseTime, timeLeftInPhase, settings, workout, currentRound, isPaused, playBeep, showNotification]);
   
   const handleStop = () => {
     resetTimer();
@@ -296,9 +278,7 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
     switch (sonicPhase) {
       case 'listen':
         if (sonicTimeLeft === 60 * 60) { // Only announce at the start of the phase
-          if (settings.noiseSystemOn) {
-            requestPhaseSound('sonic', () => sonicNoise.playPhaseNoise('sonic_start'));
-          } else if (settings.soundOn) {
+          if (settings.soundOn) {
             // Two short beeps to signal start
             requestPhaseSound('sonic', () => playBeep(880, 0.15));
             setTimeout(() => requestPhaseSound('sonic', () => playBeep(880, 0.15)), 250);
@@ -310,9 +290,7 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
         break;
       case 'earRest':
         if (sonicTimeLeft === 10 * 60) { // Only announce at the start of the break
-          if (settings.noiseSystemOn) {
-            requestPhaseSound('sonic', () => sonicNoise.playPhaseNoise('sonic_break'));
-          } else if (settings.soundOn) {
+          if (settings.soundOn) {
             // Lower chime to signal rest
             requestPhaseSound('sonic', () => playBeep(440, 0.3));
           }
@@ -322,7 +300,7 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
         }
         break;
     }
-  }, [sonicPhase, isSonicModeActive, showNotification, sonicCycleCount, sonicTimeLeft, settings.noiseSystemOn, sonicNoise.playPhaseNoise, playBeep, settings.soundOn]);
+  }, [sonicPhase, isSonicModeActive, showNotification, sonicCycleCount, sonicTimeLeft, playBeep, settings.soundOn]);
 
   // Initialize audio context and analyser for volume monitoring
   React.useEffect(() => {
