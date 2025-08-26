@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Timer Debug Test</title>
+</head>
+<body>
+    <h1>Timer Debug Test</h1>
+    <p>Check the console for debug logs when you start the timer</p>
+    <script>
+        // Simple test to verify logging is working
+        console.log('🧪 Debug test page loaded');
+        
+        // Monitor for timer logs
+        const originalLog = console.log;
+        console.log = function(...args) {
+            if (args[0] && typeof args[0] === 'string') {
+                if (args[0].includes('Timer:') || args[0].includes('Phase') || args[0].includes('Workout')) {
+                    // Highlight timer-related logs
+                    originalLog('🔍 TIMER DEBUG:', ...args);
+                    return;
+                }
+            }
+            originalLog(...args);
+        };
+    </script>
+</body>
+</html>

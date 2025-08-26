@@ -141,29 +141,45 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
                     case 'prepare':
                         nextPhase = 'work';
                         nextTime = workout.rounds[0].workTime;
+                        // Transition to work phase
                         break;
                     case 'work':
-                        if (isLastRound) {
-                            if (isLastSet) {
-                                return { ...prevStatus, phase: 'finished', workoutCompleted: true, timeLeftInPhase: 0 };
-                            }
+                        // Always go to rest after work, regardless of round position
+                        nextPhase = 'rest';
+                        nextTime = workout.rounds[prevStatus.currentRoundIndex].restTime;
+                        // Skip rest if restTime is 0
+                        if (nextTime <= 0) {
                             nextPhase = 'set_rest';
                             nextTime = workout.setRestTime;
-                        } else {
-                            nextPhase = 'rest';
-                            nextTime = workout.rounds[prevStatus.currentRoundIndex].restTime;
                         }
                         break;
                     case 'rest':
-                        nextPhase = 'work';
-                        nextRoundIndex++;
-                        nextTime = workout.rounds[nextRoundIndex].workTime;
+                        // After rest, always go to set_rest (each exercise is treated as its own set)
+                        // Check if this is the last exercise across all sets
+                        if (prevStatus.currentRoundIndex >= workout.rounds.length - 1 && prevStatus.currentSet >= workout.sets) {
+                            return { ...prevStatus, phase: 'finished', workoutCompleted: true, timeLeftInPhase: 0 };
+                        }
+                        nextPhase = 'set_rest';
+                        nextTime = workout.setRestTime;
                         break;
                     case 'set_rest':
+                        // Determine next phase: either next exercise or next set or finished
+                        nextRoundIndex = prevStatus.currentRoundIndex + 1;
+                        nextSet = prevStatus.currentSet;
+                        
+                        // If we've gone through all exercises, move to next set
+                        if (nextRoundIndex >= workout.rounds.length) {
+                            nextRoundIndex = 0; // Start from first exercise again
+                            nextSet++;
+                        }
+                        
+                        // Check if we've completed all sets
+                        if (nextSet > workout.sets) {
+                            return { ...prevStatus, phase: 'finished', workoutCompleted: true, timeLeftInPhase: 0 };
+                        }
+                        
                         nextPhase = 'work';
-                        nextSet++;
-                        nextRoundIndex = 0;
-                        nextTime = workout.rounds[0].workTime;
+                        nextTime = workout.rounds[nextRoundIndex].workTime;
                         break;
                 }
                 
