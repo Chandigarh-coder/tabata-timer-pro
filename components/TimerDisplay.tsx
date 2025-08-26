@@ -402,21 +402,21 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
   const sonicPhaseBase = sonicPhase === 'listen' ? 60 * 60 : 10 * 60;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-6 gap-4 sm:gap-6 overflow-x-hidden">
+    <div className="flex flex-col items-center justify-center min-h-[100svh] px-3 sm:px-4 py-0 sm:py-0 gap-2 sm:gap-3 overflow-x-hidden">
       {/* Sonic Mode status bar */}
       {isSonicModeActive && (
-        <div className="w-full max-w-sm sm:max-w-md lg:max-w-lg bg-slate-100 dark:bg-slate-800 rounded-xl p-3 sm:p-4 shadow-lg mx-auto">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm sm:text-base font-medium text-slate-700 dark:text-slate-300 truncate">
+        <div className="w-full max-w-[18rem] bg-slate-100 dark:bg-slate-800 rounded-lg p-1.5 mb-2 mx-auto">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">
               Sonic Mode: {sonicPhase === 'listen' ? 'Active' : 'Ear Rest'}
             </span>
-            <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-mono">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
               {Math.floor(sonicTimeLeft / 60)}:{String(sonicTimeLeft % 60).padStart(2, '0')}
             </span>
           </div>
-          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 sm:h-2.5">
+          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5">
             <div
-              className={`h-2 sm:h-2.5 rounded-full transition-all duration-1000 ${sonicPhase === 'listen' ? 'bg-blue-500' : 'bg-green-500'}`}
+              className={`h-1.5 rounded-full ${sonicPhase === 'listen' ? 'bg-blue-500' : 'bg-green-500'}`}
               style={{ width: `${(sonicTimeLeft / sonicPhaseBase) * 100}%` }}
             />
           </div>
@@ -424,102 +424,77 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
       )}
 
       {/* Main timer display */}
-      <div className="w-full max-w-sm sm:max-w-md lg:max-w-lg mx-auto">
-        {/* Status info */}
-        <div className="text-center mb-4 sm:mb-6">
-          <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 px-2 leading-tight">
-            Set {currentSet}/{workout.sets} · Exercise {phase === 'set_rest' ? workout.rounds.length : (currentRoundIndex + 1)}/{workout.rounds.length}
+      <div className="w-full max-w-sm sm:max-w-md mb-1 mx-auto">
+        <div className="text-center mb-1">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 px-2 leading-tight">
+            Set {currentSet}/{workout.sets} · Round {phase === 'set_rest' ? workout.rounds.length : (currentRoundIndex + 1)}/{workout.rounds.length}
           </p>
         </div>
 
-        {/* Circular timer */}
-        <div className="relative">
-          <CircularProgress progress={progress} colorClass={phaseInfo.color}>
-            <div className={`text-sm sm:text-base font-bold uppercase tracking-widest mb-1 sm:mb-2 ${phaseInfo.color}`}>
-              {phaseInfo.text}
-            </div>
-            <div className="font-mono font-bold text-[clamp(1.5rem,8vw,3rem)] sm:text-[clamp(2rem,6vw,3.5rem)] my-2 sm:my-3">
-              {String(Math.floor(timeLeftInPhase / 60)).padStart(2, '0')}:{String(timeLeftInPhase % 60).padStart(2, '0')}
-            </div>
-            <div className="text-base sm:text-lg lg:text-xl font-semibold px-3 sm:px-4 max-w-[90%] text-center">
-              {phase === 'work' && currentRound?.exerciseName && (
-                <div className="truncate">
-                  {currentRound.exerciseName}
-                </div>
-              )}
-            </div>
-          </CircularProgress>
-        </div>
+        <CircularProgress progress={progress} colorClass={phaseInfo.color}>
+          <div className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${phaseInfo.color}`}>
+            {phaseInfo.text}
+          </div>
+          <div className="font-mono font-bold my-1 sm:my-2 text-[clamp(20px,10vw,40px)]">
+            {String(Math.floor(timeLeftInPhase / 60)).padStart(2, '0')}:{String(timeLeftInPhase % 60).padStart(2, '0')}
+          </div>
+          <div className="text-sm sm:text-base md:text-lg font-semibold h-8 sm:h-10 px-2 max-w-[85%] whitespace-nowrap overflow-hidden text-ellipsis mx-auto leading-tight">
+            {phase === 'work' && currentRound?.exerciseName}
+          </div>
+        </CircularProgress>
 
-        {/* Next exercise info */}
-        <div className="mt-4 sm:mt-6 h-6 sm:h-8 text-center">
+        <div className="mt-2 sm:mt-3 md:mt-4 h-4 sm:h-5 text-center">
           {phase !== 'set_rest' && phase !== 'finished' && phase !== 'prepare' && currentRound && (
-            <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 px-4">
-              <span className="text-slate-400 dark:text-slate-500">Next:</span>{' '}
-              <span className="font-medium">
-                {phase === 'work' ? 'Rest' : (currentRoundIndex < workout.rounds.length - 1 ? workout.rounds[currentRoundIndex + 1]?.exerciseName : 'Set Rest')}
-              </span>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 px-3 truncate">
+              Next: {phase === 'work' ? 'Rest' : (currentRoundIndex < workout.rounds.length - 1 ? workout.rounds[currentRoundIndex + 1]?.exerciseName : 'Set Rest')}
             </p>
           )}
         </div>
       </div>
 
-      {/* Control buttons */}
-      <div className="flex justify-center gap-4 sm:gap-6 mt-4 sm:mt-6">
+      <div className="mt-2 flex justify-center space-x-3">
         <button
           onClick={handleStop}
-          className="p-3 sm:p-4 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-200 transition-all hover:scale-110 shadow-lg"
+          className="px-3.5 py-1.5 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-200 transition"
           aria-label="Stop timer"
         >
-          <StopIcon className="w-6 h-6 sm:w-7 sm:h-7" />
+          <StopIcon className="w-6 h-6" />
         </button>
         <button
           onClick={() => setPaused(!isPaused)}
-          className="p-4 sm:p-5 rounded-full bg-brand-cyan-600 hover:bg-brand-cyan-700 text-white shadow-lg hover:shadow-xl transition-all hover:scale-110"
+          className="px-3.5 py-1.5 rounded-full bg-brand-cyan-600 hover:bg-brand-cyan-700 text-white shadow-md transform hover:scale-105 transition"
           aria-label={isPaused ? 'Resume' : 'Pause'}
         >
-          {isPaused ? <PlayIcon className="w-7 h-7 sm:w-8 sm:h-8" /> : <PauseIcon className="w-7 h-7 sm:w-8 sm:h-8" />}
+          {isPaused ? <PlayIcon className="w-6 h-6" /> : <PauseIcon className="w-6 h-6" />}
         </button>
       </div>
 
-      {/* Volume indicator and warnings (Sonic Mode) */}
+      {/* Volume indicator (Sonic Mode listening) */}
       {isSonicModeActive && (
-        <div className="w-full max-w-sm sm:max-w-md lg:max-w-lg mx-auto space-y-3 sm:space-y-4">
-          {/* Volume meter */}
-          <div className="bg-slate-100 dark:bg-slate-800 rounded-xl p-3 sm:p-4 shadow-lg">
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-slate-500 dark:text-slate-400">Audio Level</span>
-              <span className="text-slate-500 dark:text-slate-400 font-mono">{Math.round(volume)}%</span>
-            </div>
-            <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 sm:h-2.5">
-              <div
-                className={`h-2 sm:h-2.5 rounded-full transition-all duration-300 ${volume > 60 ? 'bg-red-500' : 'bg-green-500'}`}
-                style={{ width: `${Math.min(100, volume)}%` }}
-              />
-            </div>
-            <p className="text-xs sm:text-sm mt-2 text-center">
-              {volume > 60 ? (
-                <span className="text-red-500 dark:text-red-400">⚠️ Volume too high! Lower to protect hearing</span>
-              ) : (
-                <span className="text-green-600 dark:text-green-400">✓ Safe listening level</span>
-              )}
-            </p>
+        <div className="mt-1.5 w-full max-w-[16rem]">
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-slate-500 dark:text-slate-400">Listening</span>
+            <span className="text-slate-500 dark:text-slate-400">{Math.round(volume)}%</span>
           </div>
-          
-          {/* Safety info */}
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 sm:p-4 text-center">
-            {sonicPhase === 'listen' ? (
-              <p className="text-sm sm:text-base text-blue-700 dark:text-blue-300">
-                🎧 Keep volume under 60% for safe listening<br />
-                <span className="text-xs sm:text-sm opacity-75">(WHO 60/60 rule)</span>
-              </p>
-            ) : (
-              <p className="text-sm sm:text-base text-orange-700 dark:text-orange-300">
-                🛑 Remove earbuds and rest in quiet environment<br />
-                <span className="text-xs sm:text-sm opacity-75">(&lt;55 dBA recommended)</span>
-              </p>
-            )}
+          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5">
+            <div
+              className={`h-1.5 rounded-full ${volume > 60 ? 'bg-red-500' : 'bg-green-500'}`}
+              style={{ width: `${Math.min(100, volume)}%` }}
+            />
           </div>
+          <p className="text-[10px] mt-0.5 text-slate-500 dark:text-slate-400">
+            {volume > 60 ? '⚠️ Volume too high! Lower to protect your hearing' : 'Volume at safe level'}
+          </p>
+        </div>
+      )}
+
+      {isSonicModeActive && (
+        <div className="mt-1 w-full max-w-[18rem] mx-auto px-3 text-[11px] text-center text-slate-600 dark:text-slate-300">
+          {sonicPhase === 'listen' ? (
+            <p className="whitespace-normal break-words">🎧 Keep volume under 60% for safe listening (WHO 60/60 rule)</p>
+          ) : (
+            <p className="whitespace-normal break-words">🛑 Remove earbuds and rest in quiet environment (&lt;55 dBA)</p>
+          )}
         </div>
       )}
     </div>
