@@ -10,7 +10,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 
 const DEFAULT_WORKOUT: Workout = {
   id: crypto.randomUUID(),
-  name: 'My First Tabata',
+  name: 'Tabata',
   sets: 8,
   setRestTime: 60,
   rounds: [
