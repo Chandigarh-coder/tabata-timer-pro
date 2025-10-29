@@ -117,87 +117,186 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
         workoutCompleted: false,
     });
 
+    const lastUpdateRef = useRef<number | null>(null);
+    const leftoverMsRef = useRef<number>(0);
+
+    const transitionPhase = useCallback((currentStatus: TimerStatus): TimerStatus => {
+        if (!workout) {
+            return currentStatus;
+        }
+
+        switch (currentStatus.phase) {
+            case 'prepare': {
+                const nextRound = workout.rounds[0];
+                return {
+                    ...currentStatus,
+                    phase: 'work',
+                    currentSet: 1,
+                    currentRoundIndex: 0,
+                    timeLeftInPhase: nextRound.workTime,
+                    totalPhaseTime: nextRound.workTime,
+                };
+            }
+            case 'work': {
+                const round = workout.rounds[currentStatus.currentRoundIndex];
+                const isFinalExercise = currentStatus.currentSet === workout.sets && currentStatus.currentRoundIndex === workout.rounds.length - 1;
+
+                if (round.restTime <= 0) {
+                    if (isFinalExercise) {
+                        return {
+                            ...currentStatus,
+                            phase: 'finished',
+                            workoutCompleted: true,
+                            timeLeftInPhase: 0,
+                            totalPhaseTime: 0,
+                        };
+                    }
+                    return {
+                        ...currentStatus,
+                        phase: 'set_rest',
+                        timeLeftInPhase: workout.setRestTime,
+                        totalPhaseTime: workout.setRestTime,
+                    };
+                }
+
+                return {
+                    ...currentStatus,
+                    phase: 'rest',
+                    timeLeftInPhase: round.restTime,
+                    totalPhaseTime: round.restTime,
+                };
+            }
+            case 'rest': {
+                const isFinalExercise = currentStatus.currentSet === workout.sets && currentStatus.currentRoundIndex === workout.rounds.length - 1;
+                if (isFinalExercise) {
+                    return {
+                        ...currentStatus,
+                        phase: 'finished',
+                        workoutCompleted: true,
+                        timeLeftInPhase: 0,
+                        totalPhaseTime: 0,
+                    };
+                }
+
+                return {
+                    ...currentStatus,
+                    phase: 'set_rest',
+                    timeLeftInPhase: workout.setRestTime,
+                    totalPhaseTime: workout.setRestTime,
+                };
+            }
+            case 'set_rest': {
+                let nextRoundIndex = currentStatus.currentRoundIndex + 1;
+                let nextSet = currentStatus.currentSet;
+
+                if (nextRoundIndex >= workout.rounds.length) {
+                    nextRoundIndex = 0;
+                    nextSet += 1;
+                }
+
+                if (nextSet > workout.sets) {
+                    return {
+                        ...currentStatus,
+                        phase: 'finished',
+                        workoutCompleted: true,
+                        timeLeftInPhase: 0,
+                        totalPhaseTime: 0,
+                    };
+                }
+
+                const nextRound = workout.rounds[nextRoundIndex];
+                return {
+                    ...currentStatus,
+                    phase: 'work',
+                    currentSet: nextSet,
+                    currentRoundIndex: nextRoundIndex,
+                    timeLeftInPhase: nextRound.workTime,
+                    totalPhaseTime: nextRound.workTime,
+                };
+            }
+            case 'finished':
+            default:
+                return currentStatus;
+        }
+    }, [workout]);
+
+    const advanceTimer = useCallback((currentStatus: TimerStatus, elapsedSeconds: number): TimerStatus => {
+        if (!workout || elapsedSeconds <= 0) {
+            return currentStatus;
+        }
+
+        let statusSnapshot = { ...currentStatus };
+        let remaining = elapsedSeconds;
+
+        while (remaining > 0 && !statusSnapshot.workoutCompleted) {
+            if (statusSnapshot.timeLeftInPhase <= 0) {
+                statusSnapshot = transitionPhase(statusSnapshot);
+                continue;
+            }
+
+            if (remaining < statusSnapshot.timeLeftInPhase) {
+                return {
+                    ...statusSnapshot,
+                    timeLeftInPhase: statusSnapshot.timeLeftInPhase - remaining,
+                };
+            }
+
+            remaining -= statusSnapshot.timeLeftInPhase;
+            statusSnapshot = transitionPhase({ ...statusSnapshot, timeLeftInPhase: 0 });
+        }
+
+        return statusSnapshot;
+    }, [transitionPhase, workout]);
+
     useEffect(() => {
         if (!workout || isPaused || status.workoutCompleted) {
+            lastUpdateRef.current = null;
+            leftoverMsRef.current = 0;
             return;
         }
 
-        const interval = setInterval(() => {
-            setStatus(prevStatus => {
-                if (prevStatus.timeLeftInPhase > 1) {
-                    return { ...prevStatus, timeLeftInPhase: prevStatus.timeLeftInPhase - 1 };
-                }
+        const tick = () => {
+            const now = Date.now();
 
-                // Time to transition to the next phase
-                let nextPhase: TimerPhase = 'work';
-                let nextSet = prevStatus.currentSet;
-                let nextRoundIndex = prevStatus.currentRoundIndex;
-                let nextTime = 0;
+            if (lastUpdateRef.current === null) {
+                lastUpdateRef.current = now;
+                leftoverMsRef.current = 0;
+                return;
+            }
 
-                const isLastRound = prevStatus.currentRoundIndex === workout.rounds.length - 1;
-                const isLastSet = prevStatus.currentSet === workout.sets;
+            const deltaMs = now - lastUpdateRef.current + leftoverMsRef.current;
+            const elapsedSeconds = Math.floor(deltaMs / 1000);
+            leftoverMsRef.current = deltaMs - elapsedSeconds * 1000;
+            lastUpdateRef.current = now;
 
-                switch (prevStatus.phase) {
-                    case 'prepare':
-                        nextPhase = 'work';
-                        nextTime = workout.rounds[0].workTime;
-                        // Transition to work phase
-                        break;
-                    case 'work':
-                        // Always go to rest after work, regardless of round position
-                        nextPhase = 'rest';
-                        nextTime = workout.rounds[prevStatus.currentRoundIndex].restTime;
-                        // Skip rest if restTime is 0
-                        if (nextTime <= 0) {
-                            nextPhase = 'set_rest';
-                            nextTime = workout.setRestTime;
-                        }
-                        break;
-                    case 'rest':
-                        // After rest, always go to set_rest (each exercise is treated as its own set)
-                        // Check if this is the last exercise across all sets
-                        if (prevStatus.currentRoundIndex >= workout.rounds.length - 1 && prevStatus.currentSet >= workout.sets) {
-                            return { ...prevStatus, phase: 'finished', workoutCompleted: true, timeLeftInPhase: 0 };
-                        }
-                        nextPhase = 'set_rest';
-                        nextTime = workout.setRestTime;
-                        break;
-                    case 'set_rest':
-                        // Determine next phase: either next exercise or next set or finished
-                        nextRoundIndex = prevStatus.currentRoundIndex + 1;
-                        nextSet = prevStatus.currentSet;
-                        
-                        // If we've gone through all exercises, move to next set
-                        if (nextRoundIndex >= workout.rounds.length) {
-                            nextRoundIndex = 0; // Start from first exercise again
-                            nextSet++;
-                        }
-                        
-                        // Check if we've completed all sets
-                        if (nextSet > workout.sets) {
-                            return { ...prevStatus, phase: 'finished', workoutCompleted: true, timeLeftInPhase: 0 };
-                        }
-                        
-                        nextPhase = 'work';
-                        nextTime = workout.rounds[nextRoundIndex].workTime;
-                        break;
-                }
-                
-                return {
-                    ...prevStatus,
-                    phase: nextPhase,
-                    currentSet: nextSet,
-                    currentRoundIndex: nextRoundIndex,
-                    timeLeftInPhase: nextTime,
-                    totalPhaseTime: nextTime,
-                };
-            });
-        }, 1000);
+            if (elapsedSeconds > 0) {
+                setStatus(prevStatus => advanceTimer(prevStatus, elapsedSeconds));
+            }
+        };
 
-        return () => clearInterval(interval);
-    }, [workout, isPaused, status.workoutCompleted]);
+        const intervalId = window.setInterval(tick, 250);
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                lastUpdateRef.current = Date.now();
+            } else {
+                tick();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.clearInterval(intervalId);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            lastUpdateRef.current = null;
+            leftoverMsRef.current = 0;
+        };
+    }, [advanceTimer, isPaused, status.workoutCompleted, workout]);
 
     const resetTimer = useCallback(() => {
+        lastUpdateRef.current = null;
+        leftoverMsRef.current = 0;
         setStatus({
             phase: 'prepare',
             currentSet: 1,
