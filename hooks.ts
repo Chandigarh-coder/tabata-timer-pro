@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type { Workout, TimerStatus, TimerPhase } from './types';
+import type { Workout, TimerStatus, TimerPhase, TimerTransitionEvent } from './types';
 
 // useLocalStorage Hook
 export function useLocalStorage<T,>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
@@ -117,8 +117,10 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
         workoutCompleted: false,
     });
 
+    const [pendingTransitions, setPendingTransitions] = useState<TimerTransitionEvent[]>([]);
     const lastUpdateRef = useRef<number | null>(null);
     const leftoverMsRef = useRef<number>(0);
+    const nextTransitionIdRef = useRef<number>(1);
 
     const transitionPhase = useCallback((currentStatus: TimerStatus): TimerStatus => {
         if (!workout) {
@@ -220,32 +222,61 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
         }
     }, [workout]);
 
-    const advanceTimer = useCallback((currentStatus: TimerStatus, elapsedSeconds: number): TimerStatus => {
+    const advanceTimer = useCallback((currentStatus: TimerStatus, elapsedSeconds: number, now: number) => {
         if (!workout || elapsedSeconds <= 0) {
-            return currentStatus;
+            return { status: currentStatus, events: [] as TimerTransitionEvent[] };
         }
 
         let statusSnapshot = { ...currentStatus };
         let remaining = elapsedSeconds;
+        const events: TimerTransitionEvent[] = [];
+        let timestampCursor = now - elapsedSeconds * 1000;
+
+        const pushEvent = (nextStatus: TimerStatus) => {
+            events.push({
+                id: nextTransitionIdRef.current++,
+                phase: nextStatus.phase,
+                set: nextStatus.currentSet,
+                roundIndex: nextStatus.currentRoundIndex,
+                occurredAt: timestampCursor,
+            });
+        };
 
         while (remaining > 0 && !statusSnapshot.workoutCompleted) {
             if (statusSnapshot.timeLeftInPhase <= 0) {
-                statusSnapshot = transitionPhase(statusSnapshot);
+                const nextStatus = transitionPhase(statusSnapshot);
+                if (nextStatus === statusSnapshot) {
+                    break;
+                }
+                pushEvent(nextStatus);
+                statusSnapshot = nextStatus;
                 continue;
             }
 
             if (remaining < statusSnapshot.timeLeftInPhase) {
                 return {
-                    ...statusSnapshot,
-                    timeLeftInPhase: statusSnapshot.timeLeftInPhase - remaining,
+                    status: {
+                        ...statusSnapshot,
+                        timeLeftInPhase: statusSnapshot.timeLeftInPhase - remaining,
+                    },
+                    events,
                 };
             }
 
+            timestampCursor += statusSnapshot.timeLeftInPhase * 1000;
             remaining -= statusSnapshot.timeLeftInPhase;
-            statusSnapshot = transitionPhase({ ...statusSnapshot, timeLeftInPhase: 0 });
+            statusSnapshot = { ...statusSnapshot, timeLeftInPhase: 0 };
+
+            const nextStatus = transitionPhase(statusSnapshot);
+            if (nextStatus === statusSnapshot) {
+                break;
+            }
+
+            pushEvent(nextStatus);
+            statusSnapshot = nextStatus;
         }
 
-        return statusSnapshot;
+        return { status: statusSnapshot, events };
     }, [transitionPhase, workout]);
 
     useEffect(() => {
@@ -270,7 +301,13 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
             lastUpdateRef.current = now;
 
             if (elapsedSeconds > 0) {
-                setStatus(prevStatus => advanceTimer(prevStatus, elapsedSeconds));
+                setStatus(prevStatus => {
+                    const { status: nextStatus, events } = advanceTimer(prevStatus, elapsedSeconds, now);
+                    if (events.length) {
+                        setPendingTransitions(prev => [...prev, ...events]);
+                    }
+                    return nextStatus;
+                });
             }
         };
 
@@ -294,9 +331,15 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
         };
     }, [advanceTimer, isPaused, status.workoutCompleted, workout]);
 
+    const clearTransitions = useCallback(() => {
+        setPendingTransitions([]);
+    }, []);
+
     const resetTimer = useCallback(() => {
         lastUpdateRef.current = null;
         leftoverMsRef.current = 0;
+        nextTransitionIdRef.current = 1;
+        setPendingTransitions([]);
         setStatus({
             phase: 'prepare',
             currentSet: 1,
@@ -307,7 +350,7 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
         });
     }, []);
 
-    return { status, resetTimer };
+    return { status, resetTimer, pendingTransitions, clearTransitions };
 }
 
 // useNotifications Hook

@@ -24,6 +24,14 @@ export interface TimerStatus {
   workoutCompleted: boolean;
 }
 
+export interface TimerTransitionEvent {
+  id: number;
+  phase: TimerPhase;
+  set: number;
+  roundIndex: number;
+  occurredAt: number;
+}
+
 export interface AppSettings {
   soundOn: boolean;
   notificationsOn: boolean;

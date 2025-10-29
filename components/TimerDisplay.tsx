@@ -128,7 +128,7 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
 }) => {
   // Debug logging removed - timer functionality confirmed working
   
-  const { status, resetTimer } = useTimer(workout, isPaused);
+  const { status, resetTimer, pendingTransitions, clearTransitions } = useTimer(workout, isPaused);
   const { playBeep } = useAudio();
   const { showNotification } = useNotifications();
 
@@ -204,59 +204,50 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
   }, [workoutCompleted, settings.soundOn, settings.notificationsOn, onStop, playBeep, showNotification]);
 
   useEffect(() => {
-    // Announce phase changes
-    if (isPaused) return;
-    
-    // Allow phase change announcements even if currentRound is null (for set_rest, finished phases)
-    if (!currentRound && phase !== 'set_rest' && phase !== 'finished') return;
-
-    // Critical state transition beep and notification - only when phase actually changes
-    const currentPhaseKey = `${phase}-${currentSet}-${currentRoundIndex}`;
-    const hasPhaseChanged = previousPhaseRef.current !== '' && previousPhaseRef.current !== currentPhaseKey;
-    
-    // Phase change detection logic
-    
-    // Update the previous phase reference immediately after checking for changes
-    const previousPhaseKey = previousPhaseRef.current;
-    previousPhaseRef.current = currentPhaseKey;
-    
-    if (hasPhaseChanged) {
-        let announcement = '';
-        switch (phase) {
-          case 'prepare':
-              announcement = 'PREPARE';
-              break;
-          case 'work':
-              announcement = currentRound?.exerciseName?.toUpperCase() || 'WORK';
-              break;
-          case 'rest':
-              announcement = 'REST';
-              break;
-          case 'set_rest':
-              announcement = 'SET REST';
-              break;
-        }
-        
-        // Phase transition confirmed
-        
-        // Show notification for phase change
-        if (announcement && settings.notificationsOn) {
-            showNotification(announcement);
-        }
-        
-        // Play phase transition beep
-        if (settings.soundOn && !workoutCompleted) {
-            playBeep(784, 0.3); // G5 - Louder state change beep
-        }
-    }
-    
-    // Countdown beeps for last 3 seconds of any phase
     if (settings.soundOn && timeLeftInPhase <= 3 && timeLeftInPhase > 0) {
-        playBeep(523, 0.1); // C5 - Countdown beeps
+        playBeep(523, 0.1);
     }
-    
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, totalPhaseTime, timeLeftInPhase, settings, workout, currentRound, isPaused, playBeep, showNotification, currentSet, currentRoundIndex, workoutCompleted]);
+  }, [settings.soundOn, timeLeftInPhase, playBeep]);
+
+  useEffect(() => {
+    if (!pendingTransitions.length) return;
+
+    const transitions = pendingTransitions.map(event => ({ ...event }));
+    clearTransitions();
+
+    transitions.forEach(event => {
+      if (isPaused) return;
+
+      let announcement = '';
+      switch (event.phase) {
+        case 'prepare':
+          announcement = 'PREPARE';
+          break;
+        case 'work': {
+          const round = workout?.rounds[event.roundIndex];
+          announcement = round?.exerciseName?.toUpperCase() || 'WORK';
+          break;
+        }
+        case 'rest':
+          announcement = 'REST';
+          break;
+        case 'set_rest':
+          announcement = 'SET REST';
+          break;
+        case 'finished':
+          announcement = 'FINISHED!';
+          break;
+      }
+
+      if (announcement && settings.notificationsOn) {
+        showNotification(announcement);
+      }
+
+      if (settings.soundOn && event.phase !== 'finished') {
+        requestPhaseSound('tabata', () => playBeep(784, 0.3));
+      }
+    });
+  }, [pendingTransitions, clearTransitions, isPaused, workout, settings.notificationsOn, settings.soundOn, showNotification, playBeep]);
   
   const handleStop = () => {
     resetTimer();
@@ -282,9 +273,7 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
   const audioContextRef = useRef<AudioContext | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const rafIdRef = useRef<number | null>(null);
-  const previousPhaseRef = useRef<string>('');
-
-  // Handle side-effects of phase transitions (notifications, noise, beeps)
+  // Handle Sonic Mode state change cues
   React.useEffect(() => {
     if (!isSonicModeActive) return;
 
