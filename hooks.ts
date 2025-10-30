@@ -355,7 +355,7 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
 
 // useNotifications Hook
 export function useNotifications() {
-  const showNotification = useCallback((title: string, timestamp: number, options?: NotificationOptions) => {
+  const scheduleNotification = useCallback((title: string, fireAt: number, id: number, options?: NotificationOptions) => {
     // Basic browser support check
     if (!('Notification' in window)) {
       console.warn('This browser does not support notifications.');
@@ -367,16 +367,46 @@ export function useNotifications() {
       return;
     }
     
-    // Use service worker to schedule notification
-    navigator.serviceWorker.getRegistration().then(registration => {
-      registration.showNotification(title, {
-        ...options,
-        timestamp,
+    // Use service worker to schedule notification at precise time
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'schedule-notification',
+        id,
+        title,
+        fireAt,
+        options: {
+          icon: '/logo.png',
+          badge: '/logo.png',
+          requireInteraction: false,
+          silent: false,
+          body: title,
+          timestamp: fireAt,
+          ...options
+        }
       });
-    }).catch(error => {
-      console.error('Error showing notification:', error);
-    });
+    } else {
+      // Fallback to immediate notification if service worker not available
+      try {
+        new Notification(title, {
+          icon: '/logo.png',
+          badge: '/logo.png',
+          tag: `tabata-${id}`,
+          requireInteraction: false,
+          silent: false,
+          body: title,
+          timestamp: fireAt,
+          ...options
+        });
+      } catch (error) {
+        console.error('Error showing notification:', error);
+      }
+    }
   }, []);
 
-  return { showNotification };
+  const showNotification = useCallback((title: string, options?: NotificationOptions) => {
+    // Immediate notification for backward compatibility
+    scheduleNotification(title, Date.now(), Math.floor(Math.random() * 1000000), options);
+  }, [scheduleNotification]);
+
+  return { showNotification, scheduleNotification };
 }
