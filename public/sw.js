@@ -22,6 +22,29 @@ self.addEventListener('message', (event) => {
       self.registration.showNotification(title, options)
     );
   }
+  
+  // Handle scheduled notifications
+  if (event.data && event.data.type === 'schedule-notification') {
+    const { id, title, options, fireAt } = event.data;
+    const now = Date.now();
+    const delay = Math.max(0, fireAt - now);
+    
+    // Schedule the notification to fire at the exact time
+    setTimeout(() => {
+      self.registration.showNotification(title, {
+        ...options,
+        tag: `tabata-${id}`,
+        requireInteraction: false,
+        silent: false,
+      });
+    }, delay);
+  }
+  
+  // Handle cancellation of scheduled notifications
+  if (event.data && event.data.type === 'cancel-notifications') {
+    // Note: setTimeout IDs can't be tracked across service worker restarts
+    // So we rely on tag-based replacement instead
+  }
 });
 
 // Handle notification clicks to bring the app into focus.

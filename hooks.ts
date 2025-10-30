@@ -355,7 +355,7 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
 
 // useNotifications Hook
 export function useNotifications() {
-  const showNotification = useCallback((title: string, options?: NotificationOptions) => {
+  const showNotification = useCallback((title: string, timestamp: number, options?: NotificationOptions) => {
     // Basic browser support check
     if (!('Notification' in window)) {
       console.warn('This browser does not support notifications.');
@@ -367,21 +367,15 @@ export function useNotifications() {
       return;
     }
     
-    // Use direct notification API to avoid service worker URL issues
-    try {
-      new Notification(title, {
-        icon: '/logo.png',
-        badge: '/logo.png',
-        tag: 'tabata-timer-notification',
-        requireInteraction: false,
-        silent: true,
-        body: '·', // Single dot character to override localhost URL
-        data: null,
-        ...options
+    // Use service worker to schedule notification
+    navigator.serviceWorker.getRegistration().then(registration => {
+      registration.showNotification(title, {
+        ...options,
+        timestamp,
       });
-    } catch (error) {
+    }).catch(error => {
       console.error('Error showing notification:', error);
-    }
+    });
   }, []);
 
   return { showNotification };

@@ -130,7 +130,7 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
   
   const { status, resetTimer, pendingTransitions, clearTransitions } = useTimer(workout, isPaused);
   const { playBeep } = useAudio();
-  const { showNotification } = useNotifications();
+  const { showNotification, scheduleNotification } = useNotifications();
 
   
   
@@ -240,14 +240,14 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
       }
 
       if (announcement && settings.notificationsOn) {
-        showNotification(announcement);
+        scheduleNotification(announcement, event.occurredAt, event.id);
       }
 
       if (settings.soundOn && event.phase !== 'finished') {
         requestPhaseSound('tabata', () => playBeep(784, 0.3));
       }
     });
-  }, [pendingTransitions, clearTransitions, isPaused, workout, settings.notificationsOn, settings.soundOn, showNotification, playBeep]);
+  }, [pendingTransitions, clearTransitions, isPaused, workout, settings.notificationsOn, settings.soundOn, scheduleNotification, playBeep]);
   
   const handleStop = () => {
     resetTimer();
