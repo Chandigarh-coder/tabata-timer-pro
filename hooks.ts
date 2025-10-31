@@ -118,9 +118,11 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
     });
 
     const [pendingTransitions, setPendingTransitions] = useState<TimerTransitionEvent[]>([]);
+    const [upcomingTransition, setUpcomingTransition] = useState<TimerTransitionEvent | null>(null);
     const lastUpdateRef = useRef<number | null>(null);
     const leftoverMsRef = useRef<number>(0);
     const nextTransitionIdRef = useRef<number>(1);
+    const workoutStartTimeRef = useRef<number | null>(null);
 
     const transitionPhase = useCallback((currentStatus: TimerStatus): TimerStatus => {
         if (!workout) {
@@ -283,6 +285,7 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
         if (!workout || isPaused || status.workoutCompleted) {
             lastUpdateRef.current = null;
             leftoverMsRef.current = 0;
+            workoutStartTimeRef.current = null;
             return;
         }
 
@@ -292,6 +295,9 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
             if (lastUpdateRef.current === null) {
                 lastUpdateRef.current = now;
                 leftoverMsRef.current = 0;
+                if (workoutStartTimeRef.current === null) {
+                    workoutStartTimeRef.current = now;
+                }
                 return;
             }
 
@@ -308,6 +314,21 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
                     }
                     return nextStatus;
                 });
+            }
+            
+            // Schedule next transition notification ahead of time
+            if (workoutStartTimeRef.current && status.timeLeftInPhase > 0) {
+                const nextTransitionTime = now + (status.timeLeftInPhase * 1000);
+                const nextStatus = transitionPhase(status);
+                if (nextStatus !== status && nextStatus.phase !== 'finished') {
+                    setUpcomingTransition({
+                        id: nextTransitionIdRef.current,
+                        phase: nextStatus.phase,
+                        set: nextStatus.currentSet,
+                        roundIndex: nextStatus.currentRoundIndex,
+                        occurredAt: nextTransitionTime,
+                    });
+                }
             }
         };
 
@@ -339,7 +360,9 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
         lastUpdateRef.current = null;
         leftoverMsRef.current = 0;
         nextTransitionIdRef.current = 1;
+        workoutStartTimeRef.current = null;
         setPendingTransitions([]);
+        setUpcomingTransition(null);
         setStatus({
             phase: 'prepare',
             currentSet: 1,
@@ -350,7 +373,7 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
         });
     }, []);
 
-    return { status, resetTimer, pendingTransitions, clearTransitions };
+    return { status, resetTimer, pendingTransitions, clearTransitions, upcomingTransition };
 }
 
 // useNotifications Hook

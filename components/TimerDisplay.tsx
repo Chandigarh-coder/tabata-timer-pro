@@ -128,7 +128,7 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
 }) => {
   // Debug logging removed - timer functionality confirmed working
   
-  const { status, resetTimer, pendingTransitions, clearTransitions } = useTimer(workout, isPaused);
+  const { status, resetTimer, pendingTransitions, clearTransitions, upcomingTransition } = useTimer(workout, isPaused);
   const { playBeep } = useAudio();
   const { showNotification, scheduleNotification } = useNotifications();
 
@@ -209,6 +209,7 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
     }
   }, [settings.soundOn, timeLeftInPhase, playBeep]);
 
+  // Handle past transitions (for sound/immediate feedback)
   useEffect(() => {
     if (!pendingTransitions.length) return;
 
@@ -218,36 +219,114 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
     transitions.forEach(event => {
       if (isPaused) return;
 
-      let announcement = '';
-      switch (event.phase) {
-        case 'prepare':
-          announcement = 'PREPARE';
-          break;
-        case 'work': {
-          const round = workout?.rounds[event.roundIndex];
-          announcement = round?.exerciseName?.toUpperCase() || 'WORK';
-          break;
-        }
-        case 'rest':
-          announcement = 'REST';
-          break;
-        case 'set_rest':
-          announcement = 'SET REST';
-          break;
-        case 'finished':
-          announcement = 'FINISHED!';
-          break;
-      }
-
-      if (announcement && settings.notificationsOn) {
-        scheduleNotification(announcement, event.occurredAt, event.id);
-      }
-
+      // Play sound immediately for feedback
       if (settings.soundOn && event.phase !== 'finished') {
         requestPhaseSound('tabata', () => playBeep(784, 0.3));
       }
+      
+      // Show notification immediately if transition just happened
+      const now = Date.now();
+      const timeSinceTransition = now - event.occurredAt;
+      if (timeSinceTransition < 2000 && settings.notificationsOn) {
+        let announcement = '';
+        switch (event.phase) {
+          case 'prepare':
+            announcement = 'PREPARE';
+            break;
+          case 'work': {
+            const round = workout?.rounds[event.roundIndex];
+            announcement = round?.exerciseName?.toUpperCase() || 'WORK';
+            break;
+          }
+          case 'rest':
+            announcement = 'REST';
+            break;
+          case 'set_rest':
+            announcement = 'SET REST';
+            break;
+          case 'finished':
+            announcement = 'FINISHED!';
+            break;
+        }
+        if (announcement) {
+          scheduleNotification(announcement, event.occurredAt, event.id);
+        }
+      }
     });
   }, [pendingTransitions, clearTransitions, isPaused, workout, settings.notificationsOn, settings.soundOn, scheduleNotification, playBeep]);
+
+  // Schedule upcoming transition notification ahead of time
+  const scheduledNotificationIdRef = useRef<number | null>(null);
+  const verificationIntervalRef = useRef<number | null>(null);
+  
+  useEffect(() => {
+    if (!upcomingTransition || isPaused || !settings.notificationsOn) {
+      return;
+    }
+
+    // Avoid duplicate scheduling
+    if (scheduledNotificationIdRef.current === upcomingTransition.id) {
+      return;
+    }
+    scheduledNotificationIdRef.current = upcomingTransition.id;
+
+    let announcement = '';
+    switch (upcomingTransition.phase) {
+      case 'prepare':
+        announcement = 'PREPARE';
+        break;
+      case 'work': {
+        const round = workout?.rounds[upcomingTransition.roundIndex];
+        announcement = round?.exerciseName?.toUpperCase() || 'WORK';
+        break;
+      }
+      case 'rest':
+        announcement = 'REST';
+        break;
+      case 'set_rest':
+        announcement = 'SET REST';
+        break;
+      case 'finished':
+        announcement = 'FINISHED!';
+        break;
+    }
+
+    if (announcement) {
+      // Schedule primary notification
+      scheduleNotification(announcement, upcomingTransition.occurredAt, upcomingTransition.id);
+      
+      // Schedule redundant backup notifications at +500ms and +1500ms
+      scheduleNotification(announcement, upcomingTransition.occurredAt + 500, upcomingTransition.id + 0.1);
+      scheduleNotification(announcement, upcomingTransition.occurredAt + 1500, upcomingTransition.id + 0.2);
+    }
+  }, [upcomingTransition, isPaused, workout, settings.notificationsOn, scheduleNotification]);
+  
+  // Continuous verification that service worker is alive and processing
+  useEffect(() => {
+    if (!settings.notificationsOn || isPaused) {
+      if (verificationIntervalRef.current) {
+        clearInterval(verificationIntervalRef.current);
+        verificationIntervalRef.current = null;
+      }
+      return;
+    }
+    
+    // Ping service worker every 2 seconds to verify it's responsive
+    verificationIntervalRef.current = window.setInterval(() => {
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'verify-notifications'
+        });
+      }
+    }, 2000);
+    
+    return () => {
+      if (verificationIntervalRef.current) {
+        clearInterval(verificationIntervalRef.current);
+        verificationIntervalRef.current = null;
+      }
+    };
+  }, [settings.notificationsOn, isPaused]);
   
   const handleStop = () => {
     resetTimer();
