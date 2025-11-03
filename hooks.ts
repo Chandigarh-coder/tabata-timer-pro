@@ -312,23 +312,24 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
                     if (events.length) {
                         setPendingTransitions(prev => [...prev, ...events]);
                     }
+                    
+                    // Schedule next transition notification ahead of time using updated status
+                    if (nextStatus.timeLeftInPhase > 0 && !nextStatus.workoutCompleted) {
+                        const nextTransitionTime = now + (nextStatus.timeLeftInPhase * 1000);
+                        const futureStatus = transitionPhase(nextStatus);
+                        if (futureStatus !== nextStatus && futureStatus.phase !== 'finished') {
+                            setUpcomingTransition({
+                                id: nextTransitionIdRef.current,
+                                phase: futureStatus.phase,
+                                set: futureStatus.currentSet,
+                                roundIndex: futureStatus.currentRoundIndex,
+                                occurredAt: nextTransitionTime,
+                            });
+                        }
+                    }
+                    
                     return nextStatus;
                 });
-            }
-            
-            // Schedule next transition notification ahead of time
-            if (workoutStartTimeRef.current && status.timeLeftInPhase > 0) {
-                const nextTransitionTime = now + (status.timeLeftInPhase * 1000);
-                const nextStatus = transitionPhase(status);
-                if (nextStatus !== status && nextStatus.phase !== 'finished') {
-                    setUpcomingTransition({
-                        id: nextTransitionIdRef.current,
-                        phase: nextStatus.phase,
-                        set: nextStatus.currentSet,
-                        roundIndex: nextStatus.currentRoundIndex,
-                        occurredAt: nextTransitionTime,
-                    });
-                }
             }
         };
 
@@ -350,7 +351,7 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
             lastUpdateRef.current = null;
             leftoverMsRef.current = 0;
         };
-    }, [advanceTimer, isPaused, status.workoutCompleted, workout]);
+    }, [advanceTimer, isPaused, status.workoutCompleted, workout, transitionPhase]);
 
     const clearTransitions = useCallback(() => {
         setPendingTransitions([]);

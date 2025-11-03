@@ -203,9 +203,21 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workoutCompleted, settings.soundOn, settings.notificationsOn, onStop, playBeep, showNotification]);
 
+  // Track last beep to prevent duplicates
+  const lastBeepTimeRef = useRef<number>(0);
+  const lastBeepSecondRef = useRef<number>(-1);
   useEffect(() => {
     if (settings.soundOn && timeLeftInPhase <= 3 && timeLeftInPhase > 0) {
-        playBeep(523, 0.1);
+        // Only beep once per unique second value
+        if (lastBeepSecondRef.current !== timeLeftInPhase) {
+          const now = Date.now();
+          // Additional time check to prevent rapid firing
+          if (now - lastBeepTimeRef.current > 900) {
+            playBeep(523, 0.1);
+            lastBeepTimeRef.current = now;
+            lastBeepSecondRef.current = timeLeftInPhase;
+          }
+        }
     }
   }, [settings.soundOn, timeLeftInPhase, playBeep]);
 
@@ -258,16 +270,21 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
   // Schedule upcoming transition notification ahead of time
   const scheduledNotificationIdRef = useRef<number | null>(null);
   const verificationIntervalRef = useRef<number | null>(null);
+  const lastScheduledTransitionRef = useRef<string>('');
   
   useEffect(() => {
     if (!upcomingTransition || isPaused || !settings.notificationsOn) {
       return;
     }
 
+    // Create unique key for this transition to prevent duplicates
+    const transitionKey = `${upcomingTransition.phase}-${upcomingTransition.set}-${upcomingTransition.roundIndex}-${upcomingTransition.occurredAt}`;
+    
     // Avoid duplicate scheduling
-    if (scheduledNotificationIdRef.current === upcomingTransition.id) {
+    if (lastScheduledTransitionRef.current === transitionKey) {
       return;
     }
+    lastScheduledTransitionRef.current = transitionKey;
     scheduledNotificationIdRef.current = upcomingTransition.id;
 
     let announcement = '';
