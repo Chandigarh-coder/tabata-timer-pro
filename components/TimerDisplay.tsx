@@ -292,41 +292,20 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
     }
 
     if (announcement) {
-      // Schedule primary notification
+      // Schedule single notification at exact transition time
       scheduleNotification(announcement, upcomingTransition.occurredAt, upcomingTransition.id);
-      
-      // Schedule redundant backup notifications at +500ms and +1500ms
-      scheduleNotification(announcement, upcomingTransition.occurredAt + 500, upcomingTransition.id + 0.1);
-      scheduleNotification(announcement, upcomingTransition.occurredAt + 1500, upcomingTransition.id + 0.2);
     }
   }, [upcomingTransition, isPaused, workout, settings.notificationsOn, scheduleNotification]);
   
-  // Continuous verification that service worker is alive and processing
+  // Clean up verification interval ref
   useEffect(() => {
-    if (!settings.notificationsOn || isPaused) {
-      if (verificationIntervalRef.current) {
-        clearInterval(verificationIntervalRef.current);
-        verificationIntervalRef.current = null;
-      }
-      return;
-    }
-    
-    // Ping service worker every 2 seconds to verify it's responsive
-    verificationIntervalRef.current = window.setInterval(() => {
-      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'verify-notifications'
-        });
-      }
-    }, 2000);
-    
     return () => {
       if (verificationIntervalRef.current) {
         clearInterval(verificationIntervalRef.current);
         verificationIntervalRef.current = null;
       }
     };
-  }, [settings.notificationsOn, isPaused]);
+  }, []);
   
   const handleStop = () => {
     resetTimer();

@@ -23,7 +23,8 @@ function startNotificationChecker() {
   nextCheckInterval = setInterval(() => {
     const now = Date.now();
     for (const [id, notification] of notificationQueue.entries()) {
-      if (now >= notification.fireAt && !notification.fired) {
+      // Only fire if past fireAt time and within 2 seconds window
+      if (now >= notification.fireAt && now < notification.fireAt + 2000 && !notification.fired) {
         fireNotification(id, notification);
       }
     }
@@ -72,6 +73,11 @@ self.addEventListener('message', (event) => {
     const { id, title, options, fireAt } = event.data;
     const now = Date.now();
     
+    // Check if already scheduled (prevent duplicates)
+    if (notificationQueue.has(id)) {
+      return;
+    }
+    
     // Add to persistent queue
     notificationQueue.set(id, {
       id,
@@ -91,15 +97,6 @@ self.addEventListener('message', (event) => {
         fireNotification(id, notification);
       }
     }, delay);
-    
-    // Also schedule a backup check 1 second after expected fire time
-    setTimeout(() => {
-      const notification = notificationQueue.get(id);
-      if (notification && !notification.fired) {
-        console.warn(`Backup firing notification ${id}`);
-        fireNotification(id, notification);
-      }
-    }, delay + 1000);
   }
   
   // Clear all scheduled notifications
