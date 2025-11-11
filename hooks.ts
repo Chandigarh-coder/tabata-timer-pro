@@ -317,7 +317,7 @@ export function useTimer(workout: Workout | null, isPaused: boolean) {
                     if (nextStatus.timeLeftInPhase > 0 && !nextStatus.workoutCompleted) {
                         const nextTransitionTime = now + (nextStatus.timeLeftInPhase * 1000);
                         const futureStatus = transitionPhase(nextStatus);
-                        if (futureStatus !== nextStatus && futureStatus.phase !== 'finished') {
+                        if (futureStatus !== nextStatus) {
                             setUpcomingTransition({
                                 id: nextTransitionIdRef.current,
                                 phase: futureStatus.phase,
@@ -390,40 +390,71 @@ export function useNotifications() {
     if (Notification.permission !== 'granted') {
       return;
     }
-    
-    // Use service worker to schedule notification at precise time
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({
-        type: 'schedule-notification',
-        id,
-        title,
-        fireAt,
-        options: {
-          icon: '/logo.png',
-          badge: '/logo.png',
-          requireInteraction: false,
-          silent: false,
-          body: title,
-          timestamp: fireAt,
-          ...options
+
+    const buildMessage = () => ({
+      type: 'schedule-notification' as const,
+      id,
+      title,
+      fireAt,
+      options: {
+        icon: '/logo.png',
+        badge: '/logo.png',
+        requireInteraction: false,
+        silent: false,
+        body: title,
+        timestamp: fireAt,
+        ...options,
+      },
+    });
+
+    const postToServiceWorker = async (): Promise<boolean> => {
+      try {
+        if ('serviceWorker' in navigator) {
+          const registration = await navigator.serviceWorker.ready;
+          const sw = registration.active || registration.waiting || registration.installing;
+          if (sw) {
+            sw.postMessage(buildMessage());
+            return true;
+          }
+        }
+      } catch (err) {
+        console.error('Error posting notification to service worker:', err);
+      }
+      return false;
+    };
+
+    const now = Date.now();
+    const isImmediate = fireAt <= now + 50;
+
+    if (isImmediate) {
+      // Immediate notification: try SW first; if unavailable, fall back to direct Notification
+      postToServiceWorker().then((ok) => {
+        if (!ok) {
+          try {
+            new Notification(title, {
+              icon: '/logo.png',
+              badge: '/logo.png',
+              tag: `tabata-${id}`,
+              requireInteraction: false,
+              silent: false,
+              body: title,
+              timestamp: fireAt,
+              ...options,
+            });
+          } catch (error) {
+            console.error('Error showing notification:', error);
+          }
         }
       });
     } else {
-      // Fallback to immediate notification if service worker not available
-      try {
-        new Notification(title, {
-          icon: '/logo.png',
-          badge: '/logo.png',
-          tag: `tabata-${id}`,
-          requireInteraction: false,
-          silent: false,
-          body: title,
-          timestamp: fireAt,
-          ...options
-        });
-      } catch (error) {
-        console.error('Error showing notification:', error);
-      }
+      // Future schedule: do NOT fall back to immediate display. Retry shortly if SW not ready yet.
+      postToServiceWorker().then((ok) => {
+        if (!ok) {
+          setTimeout(() => {
+            void postToServiceWorker();
+          }, 500);
+        }
+      });
     }
   }, []);
 
@@ -432,5 +463,17 @@ export function useNotifications() {
     scheduleNotification(title, Date.now(), Math.floor(Math.random() * 1000000), options);
   }, [scheduleNotification]);
 
-  return { showNotification, scheduleNotification };
+  const cancelScheduledNotifications = useCallback(() => {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.ready.then((registration) => {
+      const sw = registration.active || registration.waiting || registration.installing;
+      if (sw) {
+        sw.postMessage({ type: 'cancel-notifications' });
+      }
+    }).catch((err) => {
+      console.error('Error cancelling notifications via service worker:', err);
+    });
+  }, []);
+
+  return { showNotification, scheduleNotification, cancelScheduledNotifications };
 }

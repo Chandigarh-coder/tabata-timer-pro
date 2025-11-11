@@ -130,7 +130,7 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
   
   const { status, resetTimer, pendingTransitions, clearTransitions, upcomingTransition } = useTimer(workout, isPaused);
   const { playBeep } = useAudio();
-  const { showNotification, scheduleNotification } = useNotifications();
+  const { showNotification, scheduleNotification, cancelScheduledNotifications } = useNotifications();
 
   
   
@@ -197,11 +197,12 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
           setTimeout(() => playBeep(988, 0.2), 250);
           setTimeout(() => playBeep(1047, 0.3), 500);
         }
-        if(settings.notificationsOn) showNotification("FINISHED!");
+        // Do not show immediate FINISHED notification here.
+        // It is scheduled ahead of time via upcomingTransition in useTimer.
         setTimeout(onStop, 3000);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workoutCompleted, settings.soundOn, settings.notificationsOn, onStop, playBeep, showNotification]);
+  }, [workoutCompleted, settings.soundOn, onStop, playBeep]);
 
   // Track last beep to prevent duplicates
   const lastBeepTimeRef = useRef<number>(0);
@@ -324,7 +325,15 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
     };
   }, []);
   
+  // Cancel scheduled notifications when pausing, disabling notifications, or on unmount
+  useEffect(() => {
+    if (isPaused || !settings.notificationsOn) {
+      cancelScheduledNotifications();
+    }
+  }, [isPaused, settings.notificationsOn, cancelScheduledNotifications]);
+
   const handleStop = () => {
+    cancelScheduledNotifications();
     resetTimer();
     onStop();
   };
